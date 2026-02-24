@@ -4,6 +4,38 @@ import { File, Paths, Directory } from 'expo-file-system/next';
 const PROFILE_KEY = 'selectedProfile';
 const VIDEOS_KEY = 'profileVideos';
 const PROFILES_LIST_KEY = 'profilesList';
+const IP_KEY = 'serverIP';
+const DESKTOP_VIDEO_LIST_KEY = 'desktopVideoList';
+
+type FileFields = {
+  size: number;
+  type: string;
+  uploadedAt: string;
+};
+
+// sacred hall of legends
+type FileDict = {
+  [datasetName: string]: {
+    [fileName: string]: FileFields;
+  };
+};
+
+export const setDesktopVideoList = async (data: FileDict) => {
+  await AsyncStorage.setItem(DESKTOP_VIDEO_LIST_KEY, JSON.stringify(data));
+};
+
+export const getDesktopVideoList = async (): Promise<FileDict> => {
+  const json = await AsyncStorage.getItem(DESKTOP_VIDEO_LIST_KEY);
+  return json ? JSON.parse(json) : {};
+};
+
+export const setServerIP = async (ip: string | null) => {
+    await AsyncStorage.setItem(IP_KEY, ip || 'No IP Set');
+};
+
+export const getServerIP = async (): Promise<string | null> => {
+    return await AsyncStorage.getItem(IP_KEY);
+};
 
 export const setSelectedProfile = async (profile: string) => {
   await AsyncStorage.setItem(PROFILE_KEY, profile);

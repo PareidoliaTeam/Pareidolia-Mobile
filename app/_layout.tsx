@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Stack } from "expo-router";
+import { ServerProvider } from "@/contexts/ServerContext";
 // import { clearImagPickerCache } from "../hooks/useVideoStorage";
 
 export default function RootLayout() {
@@ -8,6 +9,7 @@ export default function RootLayout() {
   // }, []);
 
   return (
+    <ServerProvider>
     <Stack
       screenOptions={{
         headerShown: true,
@@ -24,5 +26,6 @@ export default function RootLayout() {
         }}
       />
     </Stack>
+    </ServerProvider>
   );
 }

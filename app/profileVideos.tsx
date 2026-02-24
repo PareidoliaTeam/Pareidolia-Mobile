@@ -2,9 +2,37 @@ import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useState } from "react";
-import { Button, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Button, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { addProfileVideo, getProfileVideos, removeProfileVideo } from "../hooks/useVideoStorage";
+import { addProfileVideo, getProfileVideos, removeProfileVideo, setDesktopVideoList } from "../hooks/useVideoStorage";
+import { useServer } from '@/contexts/ServerContext'; // Context hook for sharing server IP
+import { readAsStringAsync } from 'expo-file-system/legacy'; // Read files as base64
+
+
+interface FileItem {
+  name: string;
+  size: number;
+  uploadedAt: string;
+  type: string;
+  datasetName?: string; // Optional dataset name for categorization
+}
+
+interface FilesResponse {
+  files: FileItem[];
+  count: number;
+  timestamp: string;
+  mock?: boolean;
+}
+
+type FileDict = {
+    [datasetName: string]: {
+        [fileName: string]: {
+            size: number;
+            type: string;
+            uploadedAt: string;
+        }
+    }
+}
 
 function VideoPlayer({ uri, toggle, selected, onPress }: { uri: string; toggle: boolean; selected: boolean; onPress: () => void }) {
   const player = useVideoPlayer(uri, (p) => {
@@ -47,10 +75,38 @@ function VideoPlayer({ uri, toggle, selected, onPress }: { uri: string; toggle: 
 }
 
 export default function ProfileVideos() {
+  const { serverIP } = useServer(); // Access server IP from context
   const { profile } = useLocalSearchParams<{ profile: string }>();
   const [videos, setVideos] = useState<string[]>([]);
   const [toggle, setToggle] = useState(false);
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
+
+
+  const [files, setFiles] = useState<FileDict>({});
+  
+  // Loading state while fetch request is in progress
+  const [loading, setLoading] = useState(false);
+  
+  // Error message if fetch fails
+  const [error, setError] = useState<string | null>(null);
+  
+  // Timestamp of last successful fetch
+  const [lastFetch, setLastFetch] = useState<string | null>(null);
+
+  // Currently selected image/video from photo library
+  const [selectedMedia, setSelectedMedia] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  
+  // Track upload progress (true while POST request is in progress)
+  const [uploading, setUploading] = useState(false);
+  
+  // Success/error message after upload attempt
+  const [uploadStatus, setUploadStatus] = useState<{ success: boolean; message: string } | null>(null);
+  
+  // Photo library permission status: null=loading, true=granted, false=denied
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  
+  // Track connection test status
+  const [testingConnection, setTestingConnection] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -94,13 +150,236 @@ export default function ProfileVideos() {
     });
   };
 
+  const handleToggle = () => {
+    setToggle((prev) => !prev);
+    setSelectedVideos(new Set());
+  };
+
+  const handleUpload = async () => {
+    if (selectedVideos.size === 0) {
+      alert('No videos selected for upload.');
+      return;
+    }
+
+    pingServer();
+
+    if (error === 'No server IP address. Please scan QR code on Connect tab.') {
+      Alert.alert('No Server', 'Please scan QR code on Connect tab first.');
+      setError(null); // Clear error after alert
+      return;
+    }
+
+    performUpload();
+
+    // Implement upload logic here, using serverIP from context
+    // alert(`Uploading ${selectedVideos.size} videos to server at ${serverIP}`);
+  };
+
+  const performUpload = async () => {
+    console.log('📤 Starting upload process');
+    console.log('Server IP from context:', serverIP);
+    for(const uri of selectedVideos) {
+      setUploading(true);
+      setUploadStatus(null);
+
+      try {
+        console.log('Starting upload...');
+        console.log('Server IP from context:', serverIP);
+        // Read the file from device storage and convert to base64 string
+        // Base64 encoding converts binary data (image/video bytes) to ASCII text
+        const base64 = await readAsStringAsync(uri!, {
+          encoding: 'base64',
+        });
+
+        // Extract filename from URI (e.g., "file:///path/photo.jpg" → "photo.jpg")
+        const fileName = uri!.split('/').pop() || 'upload';
+        
+        // Build URL - normalize by removing trailing slash to avoid double-slash paths
+        const baseURL = serverIP!.replace(/\/$/, '');
+        const uploadURL = baseURL.startsWith('http') 
+          ? `${baseURL}/upload-simple`
+          : `http://${baseURL}:3001/upload-simple`;
+        
+        console.log('Upload URL:', uploadURL);
+        console.log('File name:', fileName);
+        console.log('File size (base64):', base64.length, 'characters');
+        console.log('Estimated file size:', Math.round(base64.length * 0.75), 'bytes');
+
+        // Create an AbortController with longer timeout for large files
+        // Prevents timeout on slow WiFi connections with large videos
+        const controller = new AbortController();
+        const timeoutMinutes = 10; // 10 minutes for large files
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMinutes * 60 * 1000);
+
+        // Make POST request with file data in JSON body
+        const response = await fetch(uploadURL, {
+          method: 'POST', // POST sends data to server (vs GET which retrieves data)
+          headers: {
+            'Content-Type': 'application/json', // Specify JSON format
+          },
+          body: JSON.stringify({
+            fileName: fileName,
+            fileData: base64, // Base64-encoded file content as string
+          }),
+          signal: controller.signal, // Allow timeout cancellation
+        });
+
+        clearTimeout(timeoutId);
+        console.log('Response status:', response.status);
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Response data:', data);
+
+        if (data.success) {
+          setUploadStatus({ success: true, message: `✓ Successfully uploaded ${fileName}` });
+          // Clear selection after successful upload
+          setTimeout(() => setSelectedMedia(null), 2000);
+        } else {
+          setUploadStatus({ success: false, message: data.message || 'Upload failed' });
+        }
+      } catch (err) {
+        console.error('Upload error:', err);
+        
+        let errorMessage = 'Failed to upload file';
+        if (err instanceof Error) {
+          if (err.name === 'AbortError') {
+            errorMessage = 'Upload timed out (60s). File might be too large.';
+          } else {
+            errorMessage = err.message;
+          }
+        }
+        
+        setUploadStatus({
+          success: false,
+          message: errorMessage,
+        });
+      } finally {
+        setUploading(false);
+      }
+    }
+  };
+
+  const pingServer = async () => {
+    if (!serverIP) {
+      // Alert.alert('No Server', 'Please scan QR code on Connect tab first.');
+      setError('No server IP address. Please scan QR code on Connect tab.');
+      return;
+    }
+
+    setTestingConnection(true);
+    
+    try {
+      // Normalize the server URL by removing trailing slash
+      const baseURL = serverIP.replace(/\/$/, '');
+      const testURL = baseURL.startsWith('http') 
+        ? `${baseURL}/test-upload`
+        : `http://${baseURL}:3001/test-upload`;
+      
+      console.log('Testing connection to:', testURL);
+      
+      // Make POST request with small JSON payload
+      const response = await fetch(testURL, {
+        method: 'POST', // POST method for sending data
+        headers: {
+          'Content-Type': 'application/json', // Tell server we're sending JSON
+        },
+        body: JSON.stringify({ test: true }), // Convert object to JSON string
+      });
+
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+      
+      const contentType = response.headers.get('content-type');
+      console.log('Content-Type:', contentType);
+      
+      const responseText = await response.text();
+      console.log('Response text (first 500 chars):', responseText.substring(0, 500));
+      
+      if (contentType && contentType.includes('application/json')) {
+        const data = JSON.parse(responseText);
+        console.log('Test response:', data);
+        Alert.alert('Connection Test', `✅ Success! Server is reachable.\n\nResponse: ${data.message}`);
+      } else {
+        Alert.alert(
+          'Unexpected Response',
+          `Server responded but returned ${contentType || 'unknown content type'}\n\nStatus: ${response.status}\n\nThis might be a routing or CORS issue. Check server logs.`
+        );
+      }
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      Alert.alert(
+        'Connection Failed', 
+        `Cannot reach server at ${serverIP}\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\nMake sure:\n• Server is running\n• Both devices are on same WiFi\n• Firewall allows connections`
+      );
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  // const fetchFiles = async () => {
+  //     if (!serverIP) {
+  //       setError('No server IP address. Please scan QR code on Connect tab.');
+  //       return;
+  //     }
+  
+  //     setLoading(true);
+  //     setError(null);
+  
+  //     try {
+  //       // Build URL - normalize by removing trailing slash to avoid double-slash in path
+  //       const baseURL = serverIP.replace(/\/$/, '');
+  //       const fetchURL = baseURL.startsWith('http') 
+  //         ? `${baseURL}/files`
+  //         : `http://${baseURL}:3001/files`;
+        
+  //       // Make GET request to server (no body needed for GET)
+  //       const response = await fetch(fetchURL);
+        
+  //       // Check HTTP status code (200-299 = success)
+  //       if (!response.ok) {
+  //         throw new Error(`HTTP error! status: ${response.status}`);
+  //       }
+        
+  //       // Parse JSON response from server
+  //       const data: FilesResponse = await response.json();
+        
+  //       // Transform array into nested dictionary
+  //       const dict: FileDict = {};
+  //       for (const file of data.files) {
+  //         const dataset = file.datasetName ?? 'Unknown';
+  //         if (!dict[dataset]) dict[dataset] = {};
+  //         const { name, datasetName, ...fields } = file;
+  //         dict[dataset][name] = fields;
+  //       }
+  
+  //       setFiles(dict);
+  //       setLastFetch(new Date().toLocaleTimeString());
+  
+  //       setDesktopVideoList(dict); // Example of using file list to set desktop video list
+  //       console.log('Fetch complete. Files received:', dict);
+  //     } catch (err) {
+  //       setError(err instanceof Error ? err.message : 'Failed to fetch files');
+  //     } finally {
+  //       setLoading(false);
+  //     }
+  //   };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
       <Text style={{ color: "#fff", fontSize: 24, textAlign: "center", margin: 20 }}>
         {profile} Videos
       </Text>
       <Button title="Add Video" onPress={pickVideo} />
-      <Button title={`Toggle Controls (${toggle ? "On" : "Off"})`} onPress={() => setToggle((prev) => !prev)} />
+      <Button title={`Toggle Controls (${toggle ? "On" : "Off"})`} onPress={handleToggle} />
+
+      {toggle && selectedVideos.size > 0 && (
+        <Button title="Upload Selected" onPress={handleUpload} />
+       )}
+
       <Button title="Print Selected" onPress={() => console.log([...selectedVideos])} />
 
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>

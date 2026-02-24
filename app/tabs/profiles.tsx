@@ -1,4 +1,4 @@
-import { addProfile, getProfiles, setSelectedProfile, logStorageUsage, logAllAppStorage, clearTmpFiles } from "@/hooks/useVideoStorage";
+import { addProfile, clearTmpFiles, getProfiles, logAllAppStorage, logStorageUsage, setSelectedProfile } from "@/hooks/useVideoStorage";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";

@@ -4,8 +4,12 @@ import { Image, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } fr
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getSelectedProfile, addProfileVideo } from '@/hooks/useVideoStorage';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from "expo-router";
+import { useServer } from '@/contexts/ServerContext'; // Context hook for sharing server IP
 
 export default function CameraScreen() {
+    const router = useRouter();
+    const {serverIP} = useServer(); // Access server IP from context
     const [mediaUri, setMediaUri] = useState<string | null>(null);
     const [mediaType, setMediaType] = useState<'image' | 'video' | null>(null);
     const [prediction, setPrediction] = useState<string | null>(null);
@@ -70,7 +74,13 @@ export default function CameraScreen() {
 
             <Text style={styles.title}> Selected Profile: {profile ?? 'None'} </Text>
             
+            <Text style={styles.modelStatus}>Server IP: {serverIP ?? 'Not Connected'}</Text>
+
             <View style={styles.buttonContainer}>
+                <TouchableOpacity style={styles.button} onPress={() => router.push('/qrScanner')}>
+                    <Text style={styles.buttonText}>Establish Connection</Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity style={styles.button} onPress={takePhoto}>
                     <Text style={styles.buttonText}> Take Photo</Text>
                 </TouchableOpacity>
