@@ -4,9 +4,10 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useState } from "react";
 import { Alert, Button, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { addProfileVideo, getProfileVideos, removeProfileVideo, setDesktopVideoList } from "../hooks/useVideoStorage";
+import { addProfileVideo, getProfileVideos, removeProfileVideo, setDesktopVideosSent, getDesktopVideosSent } from "../hooks/useVideoStorage";
 import { useServer } from '@/contexts/ServerContext'; // Context hook for sharing server IP
-import { readAsStringAsync } from 'expo-file-system/legacy'; // Read files as base64
+import { readAsStringAsync, getInfoAsync } from 'expo-file-system/legacy'; // Read files as base64
+import { get } from "react-native/Libraries/TurboModule/TurboModuleRegistry";
 
 
 interface FileItem {
@@ -161,18 +162,86 @@ export default function ProfileVideos() {
       return;
     }
 
-    pingServer();
-
-    if (error === 'No server IP address. Please scan QR code on Connect tab.') {
+    if (!serverIP) {
       Alert.alert('No Server', 'Please scan QR code on Connect tab first.');
-      setError(null); // Clear error after alert
       return;
     }
 
-    performUpload();
+    console.log('before ping');
+    const pingSuccess = await pingServer();
+    console.log('after ping:', pingSuccess);
+
+    if(!pingSuccess) {
+      Alert.alert('Cannot Reach Server', 'Please check your connection and try again.');
+      return;
+    };
+
+    checkAgainstSentList();
+
+    // performUpload();
 
     // Implement upload logic here, using serverIP from context
     // alert(`Uploading ${selectedVideos.size} videos to server at ${serverIP}`);
+  };
+
+  const checkAgainstSentList = async () => {
+    const sent = await getDesktopVideosSent();
+    const alreadySent = [];
+    const notSent = [];
+
+    // Build updated sent object incrementally
+    const updatedSent = { ...sent, [profile]: { ...sent[profile] } };
+
+    for (const uri of selectedVideos) {
+        const fileName = uri.split('/').pop() || 'unknown';
+        if (sent[profile] && sent[profile][fileName]) {
+            alreadySent.push(fileName);
+            selectedVideos.delete(uri);
+        } else {
+            notSent.push(fileName);
+
+            // const fileInfo = await getInfoAsync(uri);
+            // const fileSize = fileInfo.exists ? fileInfo.size ?? 0 : 0;
+
+            // const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+            // const mimeMap: Record<string, string> = {
+            //     mp4: 'video/mp4',
+            //     mov: 'video/quicktime',
+            //     avi: 'video/x-msvideo',
+            //     mkv: 'video/x-matroska',
+            // };
+            // const mimeType = mimeMap[ext] ?? 'video/mp4';
+
+            // // Accumulate into updatedSent instead of saving each iteration
+            // updatedSent[profile][fileName] = {
+            //     size: fileSize,
+            //     type: mimeType,
+            //     uploadedAt: new Date().toISOString(),
+            // };
+        }
+    }
+
+    // Save once after the loop
+    // await setDesktopVideosSent(updatedSent);
+
+    // const updated = await getDesktopVideosSent();
+    // console.log(updated);
+
+    if (alreadySent.length > 0) {
+      Alert.alert(
+        'Upload Warning',
+        `The following videos have already been uploaded before:\n\n${alreadySent.join('\n')}\n\n`,
+        [
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+      performUpload(); // Proceed with uploading any new videos that weren't in the sent list
+    } else {
+      const updated = await getDesktopVideosSent();
+      performUpload();
+      console.log('All selected videos are new. Proceeding with upload.');
+      console.log(updated); // Debug log to verify sent list updates
+    }
   };
 
   const performUpload = async () => {
@@ -236,6 +305,17 @@ export default function ProfileVideos() {
 
         if (data.success) {
           setUploadStatus({ success: true, message: `✓ Successfully uploaded ${fileName}` });
+
+          // Update the list of sent videos in AsyncStorage
+          const currentSent = await getDesktopVideosSent();
+          currentSent[profile] = currentSent[profile] || {};
+          currentSent[profile][fileName] = {
+            size: data.size,
+            type: data.type,
+            uploadedAt: new Date().toISOString(),
+          };
+          await setDesktopVideosSent(currentSent);
+
           // Clear selection after successful upload
           setTimeout(() => setSelectedMedia(null), 2000);
         } else {
@@ -266,8 +346,9 @@ export default function ProfileVideos() {
   const pingServer = async () => {
     if (!serverIP) {
       // Alert.alert('No Server', 'Please scan QR code on Connect tab first.');
+      console.log('yeet');
       setError('No server IP address. Please scan QR code on Connect tab.');
-      return;
+      return false;
     }
 
     setTestingConnection(true);
@@ -303,11 +384,13 @@ export default function ProfileVideos() {
         const data = JSON.parse(responseText);
         console.log('Test response:', data);
         Alert.alert('Connection Test', `✅ Success! Server is reachable.\n\nResponse: ${data.message}`);
+        return true;
       } else {
         Alert.alert(
           'Unexpected Response',
           `Server responded but returned ${contentType || 'unknown content type'}\n\nStatus: ${response.status}\n\nThis might be a routing or CORS issue. Check server logs.`
         );
+        return true;
       }
     } catch (error) {
       console.error('Connection test failed:', error);
@@ -315,10 +398,17 @@ export default function ProfileVideos() {
         'Connection Failed', 
         `Cannot reach server at ${serverIP}\n\nError: ${error instanceof Error ? error.message : 'Unknown error'}\n\nMake sure:\n• Server is running\n• Both devices are on same WiFi\n• Firewall allows connections`
       );
+      return false;
     } finally {
       setTestingConnection(false);
     }
   };
+
+  const printSentVideos = async () => {
+    const sent = await getDesktopVideosSent();
+    console.log('Sent videos list from AsyncStorage:', sent);
+    Alert.alert('Sent Videos', JSON.stringify(sent, null, 2));
+  }
 
   // const fetchFiles = async () => {
   //     if (!serverIP) {
@@ -373,6 +463,7 @@ export default function ProfileVideos() {
       <Text style={{ color: "#fff", fontSize: 24, textAlign: "center", margin: 20 }}>
         {profile} Videos
       </Text>
+      <Button title="Print Sent Videos List" onPress={printSentVideos} />
       <Button title="Add Video" onPress={pickVideo} />
       <Button title={`Toggle Controls (${toggle ? "On" : "Off"})`} onPress={handleToggle} />
 

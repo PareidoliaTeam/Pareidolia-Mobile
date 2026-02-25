@@ -5,7 +5,7 @@ const PROFILE_KEY = 'selectedProfile';
 const VIDEOS_KEY = 'profileVideos';
 const PROFILES_LIST_KEY = 'profilesList';
 const IP_KEY = 'serverIP';
-const DESKTOP_VIDEO_LIST_KEY = 'desktopVideoList';
+const DESKTOP_VIDEOS_SENT_KEY = 'desktopVideosSent';
 
 type FileFields = {
   size: number;
@@ -20,12 +20,12 @@ type FileDict = {
   };
 };
 
-export const setDesktopVideoList = async (data: FileDict) => {
-  await AsyncStorage.setItem(DESKTOP_VIDEO_LIST_KEY, JSON.stringify(data));
+export const setDesktopVideosSent = async (data: FileDict) => {
+  await AsyncStorage.setItem(DESKTOP_VIDEOS_SENT_KEY, JSON.stringify(data));
 };
 
-export const getDesktopVideoList = async (): Promise<FileDict> => {
-  const json = await AsyncStorage.getItem(DESKTOP_VIDEO_LIST_KEY);
+export const getDesktopVideosSent = async (): Promise<FileDict> => {
+  const json = await AsyncStorage.getItem(DESKTOP_VIDEOS_SENT_KEY);
   return json ? JSON.parse(json) : {};
 };
 
@@ -135,7 +135,7 @@ export const removeProfileVideo = async (profile: string, uri: string) => {
 
 export const getProfiles = async (): Promise<string[]> => {
   const json = await AsyncStorage.getItem(PROFILES_LIST_KEY);
-  return json ? JSON.parse(json) : ['Model 1', 'Model 2'];
+  return json ? JSON.parse(json) : ['Apples', 'Oranges', 'Bananas'];
 };
 
 function formatTimeFileName(){

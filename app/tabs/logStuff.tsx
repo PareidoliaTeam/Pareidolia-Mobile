@@ -20,7 +20,7 @@ import { StyleSheet, ScrollView, View, ActivityIndicator, RefreshControl } from 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useServer } from '@/contexts/ServerContext'; // Access server IP from QR scanner
-import { addProfileVideo, getProfileVideos, removeProfileVideo, setDesktopVideoList } from "../../hooks/useVideoStorage";
+import { addProfileVideo, getProfileVideos, removeProfileVideo } from "../../hooks/useVideoStorage";
 
 type FileDict = {
     [datasetName: string]: {
@@ -117,7 +117,7 @@ export default function ReceiveScreen() {
       setFiles(dict);
       setLastFetch(new Date().toLocaleTimeString());
 
-      setDesktopVideoList(dict); // Example of using file list to set desktop video list
+      // setDesktopVideoList(dict); // Example of using file list to set desktop video list
       console.log('Fetch complete. Files received:', dict);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch files');
