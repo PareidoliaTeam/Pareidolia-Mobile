@@ -70,7 +70,6 @@ export default function CameraScreen() {
     return (
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
             <View style={styles.container}>
-            <Text style={styles.title}>Flower Classifier</Text>
 
             <Text style={styles.title}> Selected Profile: {profile ?? 'None'} </Text>
             

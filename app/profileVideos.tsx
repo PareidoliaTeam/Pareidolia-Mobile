@@ -1,14 +1,13 @@
+import { useServer } from '@/contexts/ServerContext'; // Context hook for sharing server IP
+import { useNavigation } from '@react-navigation/native';
+import { getInfoAsync, readAsStringAsync } from 'expo-file-system/legacy'; // Read files as base64
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useState } from "react";
 import { Alert, Button, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { addProfileVideo, getProfileVideos, removeProfileVideo, setDesktopVideosSent, getDesktopVideosSent } from "../hooks/useVideoStorage";
-import { useServer } from '@/contexts/ServerContext'; // Context hook for sharing server IP
-import { readAsStringAsync, getInfoAsync } from 'expo-file-system/legacy'; // Read files as base64
-import { get } from "react-native/Libraries/TurboModule/TurboModuleRegistry";
-
+import { addProfileVideo, getDesktopVideosSent, getProfileVideos, removeProfileVideo, setDesktopVideosSent } from "../hooks/useVideoStorage";
 
 interface FileItem {
   name: string;
@@ -81,6 +80,49 @@ export default function ProfileVideos() {
   const [videos, setVideos] = useState<string[]>([]);
   const [toggle, setToggle] = useState(false);
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
+  const [sentVideos, setSentVideos] = useState<{ [fileName: string]: boolean }>({});
+  const navigation = useNavigation();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={handleToggle}
+          style={{
+            marginRight: 12,
+            width: 56,
+            height: 56,
+            justifyContent: 'center',
+            alignItems: 'center',
+            display: 'flex',
+          }}
+        >
+            <Text style={{ 
+              color: !toggle ? '#fff' : '#1744e8', 
+              fontWeight: 'bold', 
+              fontSize: 16, 
+              textAlign: 'center',
+              transform: [{ translateX: 5 }, { translateY: -10 }],
+            }}>
+              Select
+            </Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, toggle]);
+
+  useEffect(() => {
+    (async () => {
+      setVideos(await getProfileVideos(profile));
+      const sent = await getDesktopVideosSent();
+      const sentList = sent[profile] || {};
+      // Build a lookup for quick access
+      setSentVideos(Object.keys(sentList).reduce((acc, fileName) => {
+        acc[fileName] = true;
+        return acc;
+      }, {} as { [fileName: string]: boolean }));
+    })();
+  }, [profile]);
 
 
   const [files, setFiles] = useState<FileDict>({});
@@ -199,25 +241,6 @@ export default function ProfileVideos() {
             selectedVideos.delete(uri);
         } else {
             notSent.push(fileName);
-
-            // const fileInfo = await getInfoAsync(uri);
-            // const fileSize = fileInfo.exists ? fileInfo.size ?? 0 : 0;
-
-            // const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
-            // const mimeMap: Record<string, string> = {
-            //     mp4: 'video/mp4',
-            //     mov: 'video/quicktime',
-            //     avi: 'video/x-msvideo',
-            //     mkv: 'video/x-matroska',
-            // };
-            // const mimeType = mimeMap[ext] ?? 'video/mp4';
-
-            // // Accumulate into updatedSent instead of saving each iteration
-            // updatedSent[profile][fileName] = {
-            //     size: fileSize,
-            //     type: mimeType,
-            //     uploadedAt: new Date().toISOString(),
-            // };
         }
     }
 
@@ -252,69 +275,55 @@ export default function ProfileVideos() {
       setUploadStatus(null);
 
       try {
-        console.log('Starting upload...');
-        console.log('Server IP from context:', serverIP);
-        // Read the file from device storage and convert to base64 string
-        // Base64 encoding converts binary data (image/video bytes) to ASCII text
+        // ...existing code...
         const base64 = await readAsStringAsync(uri!, {
           encoding: 'base64',
         });
-
-        // Extract filename from URI (e.g., "file:///path/photo.jpg" → "photo.jpg")
         const fileName = uri!.split('/').pop() || 'upload';
-        
-        // Build URL - normalize by removing trailing slash to avoid double-slash paths
         const baseURL = serverIP!.replace(/\/$/, '');
         const uploadURL = baseURL.startsWith('http') 
           ? `${baseURL}/upload-simple`
           : `http://${baseURL}:3001/upload-simple`;
-        
-        console.log('Upload URL:', uploadURL);
-        console.log('File name:', fileName);
-        console.log('File size (base64):', base64.length, 'characters');
-        console.log('Estimated file size:', Math.round(base64.length * 0.75), 'bytes');
-
-        // Create an AbortController with longer timeout for large files
-        // Prevents timeout on slow WiFi connections with large videos
         const controller = new AbortController();
-        const timeoutMinutes = 10; // 10 minutes for large files
+        const timeoutMinutes = 10;
         const timeoutId = setTimeout(() => controller.abort(), timeoutMinutes * 60 * 1000);
-
-        // Make POST request with file data in JSON body
         const response = await fetch(uploadURL, {
-          method: 'POST', // POST sends data to server (vs GET which retrieves data)
+          method: 'POST',
           headers: {
-            'Content-Type': 'application/json', // Specify JSON format
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             fileName: fileName,
-            fileData: base64, // Base64-encoded file content as string
+            fileData: base64,
           }),
-          signal: controller.signal, // Allow timeout cancellation
+          signal: controller.signal,
         });
-
         clearTimeout(timeoutId);
-        console.log('Response status:', response.status);
-
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
-
         const data = await response.json();
-        console.log('Response data:', data);
-
         if (data.success) {
           setUploadStatus({ success: true, message: `✓ Successfully uploaded ${fileName}` });
 
           // Update the list of sent videos in AsyncStorage
           const currentSent = await getDesktopVideosSent();
-          currentSent[profile] = currentSent[profile] || {};
+          const fileInfo = await getInfoAsync(uri);
+          const fileType = fileName.endsWith('.mp4') ? 'video/mp4' : 'unknown';
           currentSent[profile][fileName] = {
-            size: data.size,
-            type: data.type,
+            size: fileInfo.exists && !fileInfo.isDirectory ? fileInfo.size ?? 0 : 0,
+            type: fileType,
             uploadedAt: new Date().toISOString(),
           };
           await setDesktopVideosSent(currentSent);
+
+          console.log('Updated sent videos list in AsyncStorage:', currentSent);
+
+          // Update sentVideos state immediately so outline updates
+          setSentVideos(prev => ({
+            ...prev,
+            [fileName]: true
+          }));
 
           // Clear selection after successful upload
           setTimeout(() => setSelectedMedia(null), 2000);
@@ -323,7 +332,6 @@ export default function ProfileVideos() {
         }
       } catch (err) {
         console.error('Upload error:', err);
-        
         let errorMessage = 'Failed to upload file';
         if (err instanceof Error) {
           if (err.name === 'AbortError') {
@@ -332,7 +340,6 @@ export default function ProfileVideos() {
             errorMessage = err.message;
           }
         }
-        
         setUploadStatus({
           success: false,
           message: errorMessage,
@@ -345,7 +352,6 @@ export default function ProfileVideos() {
 
   const pingServer = async () => {
     if (!serverIP) {
-      // Alert.alert('No Server', 'Please scan QR code on Connect tab first.');
       console.log('yeet');
       setError('No server IP address. Please scan QR code on Connect tab.');
       return false;
@@ -410,62 +416,40 @@ export default function ProfileVideos() {
     Alert.alert('Sent Videos', JSON.stringify(sent, null, 2));
   }
 
-  // const fetchFiles = async () => {
-  //     if (!serverIP) {
-  //       setError('No server IP address. Please scan QR code on Connect tab.');
-  //       return;
-  //     }
-  
-  //     setLoading(true);
-  //     setError(null);
-  
-  //     try {
-  //       // Build URL - normalize by removing trailing slash to avoid double-slash in path
-  //       const baseURL = serverIP.replace(/\/$/, '');
-  //       const fetchURL = baseURL.startsWith('http') 
-  //         ? `${baseURL}/files`
-  //         : `http://${baseURL}:3001/files`;
-        
-  //       // Make GET request to server (no body needed for GET)
-  //       const response = await fetch(fetchURL);
-        
-  //       // Check HTTP status code (200-299 = success)
-  //       if (!response.ok) {
-  //         throw new Error(`HTTP error! status: ${response.status}`);
-  //       }
-        
-  //       // Parse JSON response from server
-  //       const data: FilesResponse = await response.json();
-        
-  //       // Transform array into nested dictionary
-  //       const dict: FileDict = {};
-  //       for (const file of data.files) {
-  //         const dataset = file.datasetName ?? 'Unknown';
-  //         if (!dict[dataset]) dict[dataset] = {};
-  //         const { name, datasetName, ...fields } = file;
-  //         dict[dataset][name] = fields;
-  //       }
-  
-  //       setFiles(dict);
-  //       setLastFetch(new Date().toLocaleTimeString());
-  
-  //       setDesktopVideoList(dict); // Example of using file list to set desktop video list
-  //       console.log('Fetch complete. Files received:', dict);
-  //     } catch (err) {
-  //       setError(err instanceof Error ? err.message : 'Failed to fetch files');
-  //     } finally {
-  //       setLoading(false);
-  //     }
-  //   };
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
-      <Text style={{ color: "#fff", fontSize: 24, textAlign: "center", margin: 20 }}>
+      {/* <TouchableOpacity
+        onPress={handleToggle}
+        style={{
+          position: 'absolute',
+          top: 4,
+          right: 16,
+          width: 48,
+          height: 48,
+          borderRadius: 24,
+          backgroundColor: toggle ? '#0bef16' : '#222',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 100,
+          borderWidth: 2,
+          borderColor: '#fff',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.2,
+          shadowRadius: 4,
+        }}
+      >
+        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18 }}>
+          {toggle ? 'ON' : 'OFF'}
+        </Text>
+      </TouchableOpacity> */}
+
+      <Text style={{ color: "#fff", fontSize: 24, textAlign: "center", margin: 10 }}>
         {profile} Videos
       </Text>
       <Button title="Print Sent Videos List" onPress={printSentVideos} />
       <Button title="Add Video" onPress={pickVideo} />
-      <Button title={`Toggle Controls (${toggle ? "On" : "Off"})`} onPress={handleToggle} />
+      {/* <Button title={`Toggle Controls (${toggle ? "On" : "Off"})`} onPress={handleToggle} /> */}
 
       {toggle && selectedVideos.size > 0 && (
         <Button title="Upload Selected" onPress={handleUpload} />
@@ -481,19 +465,30 @@ export default function ProfileVideos() {
         ) : (
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-            {videos.map((uri) => (
-              <View
-                key={uri}
-                style={{ width: '48%', marginBottom: 16, backgroundColor: '#111', borderRadius: 8, overflow: 'hidden' }}
-              >
-                <VideoPlayer uri={uri} toggle={toggle} selected={selectedVideos.has(uri)} onPress={() => handleAlternateAction(uri)} />
-                <TouchableOpacity onPress={() => handleRemove(uri)} style={{ marginTop: 8 }}>
-                  <Text style={{ color: '#ff4444', textAlign: 'center' }}>Remove</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
+            {videos.map((uri) => {
+              const fileName = uri.split('/').pop() || '';
+              const isSent = sentVideos[fileName];
+              return (
+                <View
+                  key={uri}
+                  style={{
+                    width: '48%',
+                    marginBottom: 16,
+                    backgroundColor: '#111',
+                    borderRadius: 8,
+                    overflow: 'hidden',
+                    borderWidth: 3,
+                    borderColor: isSent ? '#ff855c' : '#444', // Green if sent, gray otherwise
+                  }}
+                >
+                  <VideoPlayer uri={uri} toggle={toggle} selected={selectedVideos.has(uri)} onPress={() => handleAlternateAction(uri)} />
+                  <TouchableOpacity onPress={() => handleRemove(uri)} style={{ marginTop: 8 }}>
+                    <Text style={{ color: '#ff4444', textAlign: 'center' }}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
           </View>
-          
         )}
       </ScrollView>
 

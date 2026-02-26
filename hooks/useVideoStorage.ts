@@ -7,17 +7,15 @@ const PROFILES_LIST_KEY = 'profilesList';
 const IP_KEY = 'serverIP';
 const DESKTOP_VIDEOS_SENT_KEY = 'desktopVideosSent';
 
-type FileFields = {
-  size: number;
-  type: string;
-  uploadedAt: string;
-};
-
 // sacred hall of legends
 type FileDict = {
   [datasetName: string]: {
-    [fileName: string]: FileFields;
-  };
+    [fileName: string]: {
+        size: number;
+        type: string;
+        uploadedAt: string;
+        }
+    };
 };
 
 export const setDesktopVideosSent = async (data: FileDict) => {
