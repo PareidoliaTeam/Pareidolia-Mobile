@@ -310,6 +310,9 @@ export default function ProfileVideos() {
           const currentSent = await getDesktopVideosSent();
           const fileInfo = await getInfoAsync(uri);
           const fileType = fileName.endsWith('.mp4') ? 'video/mp4' : 'unknown';
+          if (!currentSent[profile]) {
+            currentSent[profile] = {};
+          }
           currentSent[profile][fileName] = {
             size: fileInfo.exists && !fileInfo.isDirectory ? fileInfo.size ?? 0 : 0,
             type: fileType,
