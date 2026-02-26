@@ -418,31 +418,6 @@ export default function ProfileVideos() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
-      {/* <TouchableOpacity
-        onPress={handleToggle}
-        style={{
-          position: 'absolute',
-          top: 4,
-          right: 16,
-          width: 48,
-          height: 48,
-          borderRadius: 24,
-          backgroundColor: toggle ? '#0bef16' : '#222',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 100,
-          borderWidth: 2,
-          borderColor: '#fff',
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.2,
-          shadowRadius: 4,
-        }}
-      >
-        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18 }}>
-          {toggle ? 'ON' : 'OFF'}
-        </Text>
-      </TouchableOpacity> */}
 
       <Text style={{ color: "#fff", fontSize: 24, textAlign: "center", margin: 10 }}>
         {profile} Videos

@@ -40,7 +40,7 @@ export default function Index() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <View style={styles.titleContainer}>
-        <Text style={styles.header}>Model Profiles</Text>
+        <Text style={styles.header}>Dataset Profiles</Text>
       </View>
 
       <ScrollView style={styles.container} contentContainerStyle={{paddingBottom: 40, paddingHorizontal: 20}}>
