@@ -4,6 +4,36 @@ import { File, Paths, Directory } from 'expo-file-system/next';
 const PROFILE_KEY = 'selectedProfile';
 const VIDEOS_KEY = 'profileVideos';
 const PROFILES_LIST_KEY = 'profilesList';
+const IP_KEY = 'serverIP';
+const DESKTOP_VIDEOS_SENT_KEY = 'desktopVideosSent';
+
+// sacred hall of legends
+type FileDict = {
+  [datasetName: string]: {
+    [fileName: string]: {
+        size: number;
+        type: string;
+        uploadedAt: string;
+        }
+    };
+};
+
+export const setDesktopVideosSent = async (data: FileDict) => {
+  await AsyncStorage.setItem(DESKTOP_VIDEOS_SENT_KEY, JSON.stringify(data));
+};
+
+export const getDesktopVideosSent = async (): Promise<FileDict> => {
+  const json = await AsyncStorage.getItem(DESKTOP_VIDEOS_SENT_KEY);
+  return json ? JSON.parse(json) : {};
+};
+
+export const setServerIP = async (ip: string | null) => {
+    await AsyncStorage.setItem(IP_KEY, ip || 'No IP Set');
+};
+
+export const getServerIP = async (): Promise<string | null> => {
+    return await AsyncStorage.getItem(IP_KEY);
+};
 
 export const setSelectedProfile = async (profile: string) => {
   await AsyncStorage.setItem(PROFILE_KEY, profile);
@@ -20,7 +50,12 @@ export const getProfileVideos = async (profile: string): Promise<string[]> => {
 };
 
 export const addProfileVideo = async (profile: string, uri: string) => {
-    const fileName = `${Date.now()}_${uri.split('/').pop()}`;
+    console.log("URI BEFORE: ", uri)
+    // const fileName = `${formatTimeFileName()}_${uri.split('/').pop()}`;
+    const fileName = `${formatTimeFileName()}_${profile.split(' ').join('_')}.mp4`;
+
+    console.log("FILENAME AFTER: ", fileName);
+
     const dest = new File(Paths.document, fileName);
     const source = new File(uri);
     source.copy(dest);
@@ -98,8 +133,35 @@ export const removeProfileVideo = async (profile: string, uri: string) => {
 
 export const getProfiles = async (): Promise<string[]> => {
   const json = await AsyncStorage.getItem(PROFILES_LIST_KEY);
-  return json ? JSON.parse(json) : ['Model 1', 'Model 2'];
+  return json ? JSON.parse(json) : ['Apples', 'Oranges', 'Bananas'];
 };
+
+function formatTimeFileName(){
+    const now = new Date();
+    const months = {
+        "1": "jan",
+        "2": "feb",
+        "3": "mar",
+        "4": "apr",
+        "5": "may",
+        "6": "jun",
+        "7": "jul",
+        "8": "aug",
+        "9": "sep",
+        "10": "oct",
+        "11": "nov",
+        "12": "dec"
+    };
+
+    return [
+        String(now.getFullYear()),
+        months[String(now.getMonth() + 1) as keyof typeof months],
+        String(now.getDay()).padStart(2, "0"),
+        String(now.getHours()).padStart(2, "0") + String(now.getMinutes()).padStart(2, "0"),
+        String(now.getSeconds()).padStart(2, "0"),
+        "user"
+    ].join('-');
+}
 
 export const addProfile = async (name: string) => {
   const profiles = await getProfiles();
