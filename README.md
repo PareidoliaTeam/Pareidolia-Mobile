@@ -12,7 +12,6 @@ Pareidolia Mobile is a multi-platform mobile application that is used for buildi
 ## Features
 - Send images and video to Pareidolia Desktop
 - Collect video data for model training
-- 
 - Cross-platform support (iOS, Android)
 
 ## Installation
