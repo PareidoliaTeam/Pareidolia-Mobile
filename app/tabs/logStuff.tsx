@@ -47,6 +47,18 @@ interface FilesResponse {
   mock?: boolean;
 }
 
+interface FetchLabelsFilesResponse {
+  [labelName: string]: {
+    filePath: string;
+  };
+}
+
+interface FetchModelFilesResponse {
+  [modelName: string]: {
+    filePath: string;
+  };
+}
+
 export default function ReceiveScreen() {
   // Get server IP from Context (set by QR scanner on Connect tab)
   const { serverIP } = useServer();
@@ -92,7 +104,7 @@ export default function ReceiveScreen() {
       const baseURL = serverIP.replace(/\/$/, '');
       const fetchURL = baseURL.startsWith('http') 
         ? `${baseURL}/files`
-        : `http://${baseURL}:3001/files`;
+        : `http://${baseURL}:3001/download-model-to-mobile`;
       
       // Make GET request to server (no body needed for GET)
       const response = await fetch(fetchURL);

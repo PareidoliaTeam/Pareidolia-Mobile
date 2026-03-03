@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "net.armandovega.units"
+      "bundleIdentifier": "net.armandovega.pareidolia"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +21,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "net.armandovega.units"
+      "package": "net.armandovega.pareidolia"
     },
     "web": {
       "output": "static",
