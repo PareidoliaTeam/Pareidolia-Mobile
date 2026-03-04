@@ -9,10 +9,10 @@
  * for setting the current dataset profile and the videos associated 
  * with each profile.
  */
-import { clearTmpFiles, logAllAppStorage, logStorageUsage, setSelectedProfile } from '@/hooks/useVideoStorage';
+import { clearTmpFiles, logAllAppStorage, logStorageUsage, setSelectedProfile, clearTempDocuments } from '@/hooks/useVideoStorage';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, Touchable, TouchableOpacity, View } from 'react-native';
 import InputModal from './datasetCreationModal';
 
 type Props = {
@@ -66,6 +66,15 @@ function useDatasetTabContent({
           }}
         >
           <Text style={styles.smallButtonText}>Clear Tmp Files</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.smallButton, { alignSelf: 'center', marginBottom: 20, backgroundColor: '#8B0000' }]}
+          onPress={async () => {
+            await clearTempDocuments();
+          }}
+        >
+          <Text style={styles.smallButtonText}>Clear Document Files</Text>
         </TouchableOpacity>
 
         <View style={styles.grid}>
