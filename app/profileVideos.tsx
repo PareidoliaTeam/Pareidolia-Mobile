@@ -282,8 +282,8 @@ export default function ProfileVideos() {
         const fileName = uri!.split('/').pop() || 'upload';
         const baseURL = serverIP!.replace(/\/$/, '');
         const uploadURL = baseURL.startsWith('http') 
-          ? `${baseURL}/upload-simple`
-          : `http://${baseURL}:3001/upload-simple`;
+          ? `${baseURL}/upload-video`
+          : `http://${baseURL}:3001/upload-video`;
         const controller = new AbortController();
         const timeoutMinutes = 10;
         const timeoutId = setTimeout(() => controller.abort(), timeoutMinutes * 60 * 1000);
@@ -295,6 +295,7 @@ export default function ProfileVideos() {
           body: JSON.stringify({
             fileName: fileName,
             fileData: base64,
+            datasetName: profile
           }),
           signal: controller.signal,
         });
@@ -366,18 +367,17 @@ export default function ProfileVideos() {
       // Normalize the server URL by removing trailing slash
       const baseURL = serverIP.replace(/\/$/, '');
       const testURL = baseURL.startsWith('http') 
-        ? `${baseURL}/test-upload`
-        : `http://${baseURL}:3001/test-upload`;
+        ? `${baseURL}/ping`
+        : `http://${baseURL}:3001/ping`;
       
       console.log('Testing connection to:', testURL);
       
-      // Make POST request with small JSON payload
       const response = await fetch(testURL, {
-        method: 'POST', // POST method for sending data
+        method: 'POST',
         headers: {
-          'Content-Type': 'application/json', // Tell server we're sending JSON
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ test: true }), // Convert object to JSON string
+        body: JSON.stringify({ test: true }),
       });
 
       console.log('Response status:', response.status);
@@ -389,6 +389,10 @@ export default function ProfileVideos() {
       const responseText = await response.text();
       console.log('Response text (first 500 chars):', responseText.substring(0, 500));
       
+      console.log("contentType:", contentType);
+      console.log("responseText:", contentType?.includes('application/json'));
+      console.log("responseText:", responseText);
+
       if (contentType && contentType.includes('application/json')) {
         const data = JSON.parse(responseText);
         console.log('Test response:', data);

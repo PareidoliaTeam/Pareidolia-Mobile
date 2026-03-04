@@ -1,11 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { File, Paths, Directory } from 'expo-file-system/next';
+import { deleteAsync, downloadAsync, getInfoAsync } from 'expo-file-system/legacy';
+import { Directory, File, Paths } from 'expo-file-system/next';
 
 const PROFILE_KEY = 'selectedProfile';
+const MODEL_PROFILES_LIST_KEY = 'modelProfilesList';
 const VIDEOS_KEY = 'profileVideos';
 const PROFILES_LIST_KEY = 'profilesList';
 const IP_KEY = 'serverIP';
 const DESKTOP_VIDEOS_SENT_KEY = 'desktopVideosSent';
+
+const modelsSubDir = new Directory(Paths.document, 'models');
+const videosSubDir = new Directory(Paths.document, 'videos');
+
+if (!videosSubDir.exists) {
+  videosSubDir.create();
+}
+if (!modelsSubDir.exists) {
+  modelsSubDir.create();
+}
 
 // sacred hall of legends
 type FileDict = {
@@ -17,6 +29,71 @@ type FileDict = {
         }
     };
 };
+
+type FetchModelFilesListRes = {
+  [modelName: string]: {
+    path: string;
+  };
+}
+
+type FetchLabelsFilesRes = {
+  [labelName: string]: {
+    path: string;
+  };
+}
+
+export const downloadModelFile = async (modelName: string, serverIP: string) => {
+  const baseURL = serverIP.replace(/\/$/, '');
+  const downloadURL = baseURL.startsWith('http') 
+    ? `${baseURL}/download-model-to-mobile?modelName=${modelName}`
+    : `http://${baseURL}:3001/download-model-to-mobile?modelName=${modelName}`;
+  console.log("modelName: ", modelName);
+  console.log("serverIP: ", serverIP);
+  console.log("downloadURL: ", downloadURL);
+  try {
+    const dest = new File(new Directory(Paths.document, 'models'), modelName);
+    console.log("dest uri: ", dest.uri);
+    
+    const fileExists = await getInfoAsync(dest.uri + ".tflite");
+    if (fileExists.exists) {
+      await deleteAsync(dest.uri + ".tflite");
+    }
+
+    const { uri, status } = await downloadAsync(downloadURL, dest.uri + ".tflite");
+    
+    if (status !== 200) {
+      throw new Error(`Server returned status ${status}`);
+    }
+
+    // Verify file actually saved
+    const fileInfo = await getInfoAsync(uri);
+    if (!fileInfo.exists) {
+      throw new Error('File failed to save to device');
+    }
+    if (fileInfo.size === 0) {
+      throw new Error('Downloaded file is empty');
+    }
+
+    const ext = uri.split('/').pop() || 'unknown';
+    console.log('Model saved to:', uri);
+    console.log('File extension:', ext);
+    console.log('File size:', fileInfo.size, 'bytes');
+    return uri;
+
+  } catch (error) {
+    console.error('Error downloading model:', error);
+    throw error; // re-throw so the caller can handle it
+  }
+}
+
+export const setModelProfilesList = async (profiles: FetchModelFilesListRes) => {
+  await AsyncStorage.setItem(MODEL_PROFILES_LIST_KEY, JSON.stringify(profiles));
+}
+
+export const getModelProfilesList = async (): Promise<FetchModelFilesListRes> => {
+  const json = await AsyncStorage.getItem(MODEL_PROFILES_LIST_KEY);
+  return json ? JSON.parse(json) : {};
+}
 
 export const setDesktopVideosSent = async (data: FileDict) => {
   await AsyncStorage.setItem(DESKTOP_VIDEOS_SENT_KEY, JSON.stringify(data));
@@ -56,7 +133,7 @@ export const addProfileVideo = async (profile: string, uri: string) => {
 
     console.log("FILENAME AFTER: ", fileName);
 
-    const dest = new File(Paths.document, fileName);
+    const dest = new File(new Directory(Paths.document, 'videos'), fileName);
     const source = new File(uri);
     source.copy(dest);
 
@@ -81,28 +158,81 @@ export const addProfileVideo = async (profile: string, uri: string) => {
     clearTmpFiles(); // Clean up any remaining temp files after adding a new video
 };
 
-export const clearTmpFiles = () => {
+const deleteMediaRecursive = (dir: Directory, indent: string = '') => {
     try {
-        const tmpDir = new Directory(Paths.cache.uri.replace(/\/Library\/Caches\/?$/, '/tmp'));
-        if (tmpDir.exists) {
-            for (const item of tmpDir.list()) {
-                try {
-                    if (item instanceof File) {
-                        const name = item.uri.split('/').pop() || '';
-                        if (name.endsWith('.MOV') || name.endsWith('.mov') || 
-                            name.endsWith('.mp4') || name.endsWith('.largeThumbnail')) {
-                            console.log(`Deleting tmp file: ${name} (${item.size} bytes)`);
-                            item.delete();
-                        }
+        const items = dir.list();
+        console.log(`${indent}Scanning: ${dir.uri.replace(/\/$/, '').split('/').pop()} (${items.length} items)`);
+        for (const item of items) {
+            try {
+                if (item instanceof File) {
+                    const name = item.uri.replace(/\/$/, '').split('/').pop() || '';
+                    if (name.endsWith('.MOV') || name.endsWith('.mov') ||
+                        name.endsWith('.mp4') || name.endsWith('.largeThumbnail') ||
+                        name.endsWith('.tflite')) {
+                        console.log(`${indent}Deleting: ${name} (${item.size} bytes)`);
+                        item.delete();
+                    } else {
+                        console.log(`${indent}Skipping: ${name}`);
                     }
-                } catch (e) {
-                    // skip items that can't be deleted
+                } else if (item instanceof Directory) {
+                    deleteMediaRecursive(item, indent + '  ');
                 }
+            } catch (e) {
+                // skip items that can't be deleted
             }
+        }
+    } catch (e) {
+        console.warn(`${indent}[ERROR scanning dir]: ${e}`);
+    }
+};
+
+export const clearTmpFiles = () => {
+    console.log('=== CLEAR TMP FILES ===');
+
+    try {
+        const cacheUri = Paths.cache.uri;
+        console.log('Cache URI:', cacheUri);
+
+        // Try both common tmp path patterns
+        const tmpPaths = [
+            cacheUri.replace(/\/Library\/Caches\/?$/, '/tmp'),
+            cacheUri.replace(/\/Caches\/?$/, '/tmp'),
+            cacheUri.replace(/\/[^/]+\/?$/, '/tmp'),
+        ];
+
+        let found = false;
+        for (const tmpPath of tmpPaths) {
+            console.log('Trying tmp path:', tmpPath);
+            const tmpDir = new Directory(tmpPath);
+            if (tmpDir.exists) {
+                found = true;
+                deleteMediaRecursive(tmpDir);
+                break;
+            }
+        }
+
+        if (!found) {
+            console.warn('No tmp directory found at any expected path');
         }
     } catch (e) {
         console.warn('Failed to clear tmp files:', e);
     }
+
+    console.log('=== END CLEAR TMP FILES ===');
+};
+
+export const clearTempDocuments = () => {
+    console.log('=== CLEAR TEMP DOCUMENTS ===');
+    try {
+        const docDir = new Directory(Paths.document);
+        if (docDir.exists) {
+            console.log('Scanning Documents for stray media files...');
+            deleteMediaRecursive(docDir);
+        }
+    } catch (e) {
+        console.warn('Failed to scan Documents:', e);
+    }
+    console.log('=== END CLEAR TEMP DOCUMENTS ===');
 };
 
 export const removeProfileVideo = async (profile: string, uri: string) => {
@@ -192,20 +322,29 @@ export const clearImagPickerCache = async () => {
 export const logStorageUsage = async () => {
     console.log('=== STORAGE DIAGNOSTIC ===');
 
+    const listWithSubdirs = (dir: Directory, indent: string = '') => {
+        try {
+            if (!dir.exists) return;
+            for (const item of dir.list()) {
+                const name = item.uri.replace(/\/$/, '').split('/').pop() || '';
+                if (item instanceof File) {
+                    console.log(`${indent}FILE: ${name} (${item.size} bytes)`);
+                } else if (item instanceof Directory) {
+                    console.log(`${indent}DIR:  ${name}/`);
+                    listWithSubdirs(item, indent + '  ');
+                }
+            }
+        } catch (e) {
+            console.warn(`${indent}[ERROR reading dir]: ${e}`);
+        }
+    };
+
     // 1. List all files in Documents
     try {
         const docDir = new Directory(Paths.document);
         if (docDir.exists) {
-            const items = docDir.list();
-            console.log(`Documents directory (${items.length} items):`);
-            for (const item of items) {
-                const name = item.uri.split('/').pop() || '';
-                if (item instanceof File) {
-                    console.log(`  FILE: ${name} (${item.size} bytes)`);
-                } else {
-                    console.log(`  DIR:  ${name}`);
-                }
-            }
+            console.log(`Documents directory (${docDir.list().length} items):`);
+            listWithSubdirs(docDir, '  ');
         }
     } catch (e) {
         console.warn('Failed to list Documents:', e);
@@ -215,16 +354,8 @@ export const logStorageUsage = async () => {
     try {
         const cacheDir = new Directory(Paths.cache);
         if (cacheDir.exists) {
-            const items = cacheDir.list();
-            console.log(`Cache directory (${items.length} items):`);
-            for (const item of items) {
-                const name = item.uri.split('/').pop() || '';
-                if (item instanceof File) {
-                    console.log(`  FILE: ${name} (${item.size} bytes)`);
-                } else {
-                    console.log(`  DIR:  ${name}`);
-                }
-            }
+            console.log(`Cache directory (${cacheDir.list().length} items):`);
+            listWithSubdirs(cacheDir, '  ');
         }
     } catch (e) {
         console.warn('Failed to list Cache:', e);
@@ -244,7 +375,7 @@ export const logAllAppStorage = async () => {
         try {
             if (!dir.exists) return;
             for (const item of dir.list()) {
-                const name = item.uri.split('/').pop() || '';
+                const name = item.uri.replace(/\/$/, '').split('/').pop() || '';
                 if (item instanceof File) {
                     console.log(`${indent}FILE: ${name} (${item.size} bytes)`);
                 } else if (item instanceof Directory) {
@@ -274,7 +405,7 @@ export const logAllAppStorage = async () => {
         const appContainer = new Directory(appContainerPath);
         if (appContainer.exists) {
             for (const item of appContainer.list()) {
-                const name = item.uri.split('/').pop() || '';
+                const name = item.uri.replace(/\/$/, '').split('/').pop() || '';
                 if (item instanceof Directory) {
                     console.log(`  DIR:  ${name}/`);
                     listRecursive(item, '    ');

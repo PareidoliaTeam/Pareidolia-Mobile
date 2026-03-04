@@ -15,12 +15,12 @@
  * Response: { "files": [{"name": "photo.jpg", "size": 1234, ...}], "count": 1 }
  */
 
-import { useState } from 'react';
-import { StyleSheet, ScrollView, View, ActivityIndicator, RefreshControl } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useServer } from '@/contexts/ServerContext'; // Access server IP from QR scanner
-import { addProfileVideo, getProfileVideos, removeProfileVideo } from "../../hooks/useVideoStorage";
+import { useState } from 'react';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { downloadModelFile } from "../../hooks/useVideoStorage";
 
 type FileDict = {
     [datasetName: string]: {
@@ -40,22 +40,22 @@ interface FileItem {
   datasetName?: string; // Optional dataset name for categorization
 }
 
-interface FilesResponse {
+type FilesResponse = {
   files: FileItem[];
   count: number;
   timestamp: string;
   mock?: boolean;
 }
 
-interface FetchLabelsFilesResponse {
+type FetchLabelsFilesRes = {
   [labelName: string]: {
-    filePath: string;
+    path: string;
   };
 }
 
-interface FetchModelFilesResponse {
+type FetchModelFilesListRes = {
   [modelName: string]: {
-    filePath: string;
+    path: string;
   };
 }
 
@@ -64,7 +64,7 @@ export default function ReceiveScreen() {
   const { serverIP } = useServer();
   
   // State for file list received from server
-  const [files, setFiles] = useState<FileDict>({});
+  const [files, setFiles] = useState<FetchModelFilesListRes>({});
   
   // Loading state while fetch request is in progress
   const [loading, setLoading] = useState(false);
@@ -90,7 +90,7 @@ export default function ReceiveScreen() {
    *   "count": 1
    * }
    */
-  const fetchFiles = async () => {
+  const fetchModelsList = async () => {
     if (!serverIP) {
       setError('No server IP address. Please scan QR code on Connect tab.');
       return;
@@ -103,8 +103,8 @@ export default function ReceiveScreen() {
       // Build URL - normalize by removing trailing slash to avoid double-slash in path
       const baseURL = serverIP.replace(/\/$/, '');
       const fetchURL = baseURL.startsWith('http') 
-        ? `${baseURL}/files`
-        : `http://${baseURL}:3001/download-model-to-mobile`;
+        ? `${baseURL}/get-models`
+        : `http://${baseURL}:3001/get-models`;
       
       // Make GET request to server (no body needed for GET)
       const response = await fetch(fetchURL);
@@ -115,16 +115,17 @@ export default function ReceiveScreen() {
       }
       
       // Parse JSON response from server
-      const data: FilesResponse = await response.json();
+      const data: FetchModelFilesListRes = await response.json();
       
       // Transform array into nested dictionary
-      const dict: FileDict = {};
-      for (const file of data.files) {
-        const dataset = file.datasetName ?? 'Unknown';
-        if (!dict[dataset]) dict[dataset] = {};
-        const { name, datasetName, ...fields } = file;
-        dict[dataset][name] = fields;
-      }
+      // const dict: FileDict = {};
+      // for (const file of data.files) {
+      //   const dataset = file.datasetName ?? 'Unknown';
+      //   if (!dict[dataset]) dict[dataset] = {};
+      //   const { name, datasetName, ...fields } = file;
+      //   dict[dataset][name] = fields;
+      // }
+      const dict: FetchModelFilesListRes = data; // Assuming server already sends in desired format
 
       setFiles(dict);
       setLastFetch(new Date().toLocaleTimeString());
@@ -133,6 +134,42 @@ export default function ReceiveScreen() {
       console.log('Fetch complete. Files received:', dict);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch files');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchModel = async (modelName: string) => {
+    if (!serverIP) {
+      setError('No server IP address. Please scan QR code on Connect tab.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    console.log(`Attempting to download model: ${modelName} from server: ${serverIP}`);
+
+    try {
+
+      // const baseURL = serverIP.replace(/\/$/, '');
+      // const fetchURL = baseURL.startsWith('http') 
+      //   ? `${baseURL}/get-models`
+      //   : `http://${baseURL}:3001/get-models`;
+      
+      // // Make GET request to server (no body needed for GET)
+      // const response = await fetch(fetchURL);
+      
+      // // Check HTTP status code (200-299 = success)
+      // if (!response.ok) {
+      //   throw new Error(`HTTP error! status: ${response.status}`);
+      // }
+      downloadModelFile(modelName, serverIP);
+
+
+
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch model');
     } finally {
       setLoading(false);
     }
@@ -160,10 +197,10 @@ export default function ReceiveScreen() {
       <ThemedView style={styles.buttonContainer}>
         <ThemedView 
           style={[styles.button, !serverIP && styles.buttonDisabled]}
-          onTouchEnd={serverIP ? fetchFiles : undefined}
+          onTouchEnd={serverIP ? fetchModelsList : undefined}
         >
           <ThemedText style={styles.buttonText}>
-            {loading ? 'Loading...' : 'Fetch Files'}
+            {loading ? 'Loading...' : 'Fetch Models'}
           </ThemedText>
         </ThemedView>
       </ThemedView>
@@ -181,28 +218,24 @@ export default function ReceiveScreen() {
       <ScrollView 
         style={styles.fileList}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={fetchFiles} />
+          <RefreshControl refreshing={loading} onRefresh={fetchModelsList} />
         }
       >
         {loading && Object.keys(files).length === 0 ? (
           <ActivityIndicator size="large" style={styles.loader} />
         ) : Object.keys(files).length === 0 ? (
-          <ThemedText style={styles.emptyText}>No files yet. Tap "Fetch Files" to load.</ThemedText>
+          <ThemedText style={styles.emptyText}>No models yet. Tap "Fetch Models" to load.</ThemedText>
         ) : (
-          Object.entries(files).map(([datasetName, fileMap]) => (
-            <ThemedView key={datasetName}>
-              <ThemedText style={styles.fileName}>{datasetName}</ThemedText>
-              {Object.entries(fileMap).map(([fileName, fields]) => (
-                <ThemedView key={fileName} style={styles.fileItem}>
-                  <ThemedText style={styles.fileName}>{fileName}</ThemedText>
-                  <ThemedText style={styles.fileDetails}>
-                    {formatFileSize(fields.size)} • {fields.type}
-                  </ThemedText>
-                  <ThemedText style={styles.fileDate}>
-                    {new Date(fields.uploadedAt).toLocaleString()}
-                  </ThemedText>
-                </ThemedView>
-              ))}
+          Object.entries(files).map(([modelName, fields]) => (
+            <ThemedView key={modelName} style={styles.fileItem}>
+              <ThemedText style={styles.fileName}>{modelName}</ThemedText>
+              <ThemedText style={styles.fileDetails}>{fields.path}</ThemedText>
+              <TouchableOpacity
+                style={styles.button}
+                onPress={() => fetchModel(modelName)}
+              >
+                <ThemedText style={styles.buttonText}>Download</ThemedText>
+              </TouchableOpacity>
             </ThemedView>
           ))
         )}
