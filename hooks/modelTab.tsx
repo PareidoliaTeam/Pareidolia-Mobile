@@ -9,7 +9,7 @@
  * for setting the current dataset profile and the videos associated 
  * with each profile.
  */
-import { clearTmpFiles, logAllAppStorage, logStorageUsage, setSelectedDatasetProfile, clearTempDocuments } from '@/hooks/useVideoStorage';
+import { clearTmpFiles, logAllAppStorage, logStorageUsage, setSelectedModelProfile, clearTempDocuments } from '@/hooks/useVideoStorage';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, Touchable, TouchableOpacity, View } from 'react-native';
@@ -21,8 +21,8 @@ type Props = {
   handleAddProfile: (name: string) => void;
 };
 
-function useDatasetTabContent({
-  profiles: datasets,
+function useModelTabContent({
+  profiles: models,
   router,
   handleAddProfile
 }: Props) {
@@ -41,7 +41,7 @@ function useDatasetTabContent({
         onCancel={() => setModalVisible(false)}
       />
       {/* <View style={styles.titleContainer}>
-        <Text style={styles.header}>Dataset Profiles</Text>
+        <Text style={styles.header}>Model Profiles</Text>
       </View> */}
       <ScrollView style={styles.container} contentContainerStyle={{paddingBottom: 40, paddingHorizontal: 20}}>
         <TouchableOpacity
@@ -81,24 +81,24 @@ function useDatasetTabContent({
         </TouchableOpacity>
 
         <View style={styles.grid}>
-          {datasets.map(profile => (
+          {models.map(profile => (
             <View key={profile} style={styles.cardContainer}>
               <Text style={styles.smallButtonText}>{profile}</Text>
               <TouchableOpacity
                 style={[styles.smallButton, { marginTop: 8, backgroundColor: '#4A90E2' }]}
                 onPress={async () => {
-                  await setSelectedDatasetProfile(profile);
-                  console.log(`Selected dataset profile: ${profile}`);
+                  await setSelectedModelProfile(profile);
+                  console.log(`Selected model profile: ${profile}`);
                 }}
               >
                 <Text style={styles.smallButtonText}>Set Profile</Text>
               </TouchableOpacity>
-              <TouchableOpacity
+              {/* <TouchableOpacity
                 style={[styles.smallButton, { marginTop: 6 }]} 
                 onPress={() => router.push({ pathname: '/profileVideos', params: { profile } })}
               >
                 <Text style={styles.smallButtonText}>View Videos</Text>
-              </TouchableOpacity>
+              </TouchableOpacity> */}
             </View>
           ))}
           
@@ -118,7 +118,7 @@ function useDatasetTabContent({
   );
 }
 
-export default useDatasetTabContent;
+export default useModelTabContent;
 
 const styles = StyleSheet.create({
   container: {

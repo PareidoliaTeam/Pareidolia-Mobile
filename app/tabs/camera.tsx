@@ -2,7 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { getSelectedProfile, addProfileVideo } from '@/hooks/useVideoStorage';
+import { getSelectedDatasetProfile, addProfileVideo } from '@/hooks/useVideoStorage';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from "expo-router";
 import { useServer } from '@/contexts/ServerContext'; // Context hook for sharing server IP
@@ -21,7 +21,7 @@ export default function CameraScreen() {
         React.useCallback(() => {
             let isActive = true;
             (async () => {
-                const selected = await getSelectedProfile();
+                const selected = await getSelectedDatasetProfile();
                 if (isActive) setProfile(selected);
             })();
             return () => { isActive = false; };
