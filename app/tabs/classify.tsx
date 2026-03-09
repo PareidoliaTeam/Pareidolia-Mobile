@@ -8,11 +8,13 @@
  *   Description: Tab that allows users to continuously classify what the camera sees in real time.
  */
 
+import { useRouter, useNavigation } from "expo-router";
 import { useTensorflowModel } from "@/hooks/useTensorFlowModel"; // hook to load the model
-import { useRef, useState } from "react"; // useState for state management, useRef for camera reference
+import { useLayoutEffect, useRef, useState } from "react"; // useState for state management, useRef for camera reference
 import { Button, Image, Text, View, StyleSheet, TouchableOpacity } from "react-native"; // RN components
 import { Camera, useCameraDevices, useFrameProcessor } from 'react-native-vision-camera'; // For continuous camera feed
 import { useResizePlugin } from 'vision-camera-resize-plugin'; // For resizing frames
+import { Ionicons } from '@expo/vector-icons'; // For icons in the header
 
 const labels = ['roses', 'daisy', 'dandelion', 'sunflowers', 'tulips']; // Example labels for flower classification
 
@@ -23,6 +25,28 @@ export default function Index() {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const { model, loading, error } = useTensorflowModel(require('@/assets/models/model_u8_in_f32_out_flower_hope.tflite')); // expects uint8 of shape (1, 180, 180, 3) which is batch size 1, images of 180 x 180, 3 color channels
   const cameraRef = useRef<Camera>(null);
+  const navigation = useNavigation();
+  const router = useRouter();
+  
+  useLayoutEffect(() => {
+    navigation.getParent()?.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={() => router.push('/qrScanner')}
+          style={{
+            marginRight: 12,
+            width: 56,
+            height: 56,
+            justifyContent: 'center',
+            alignItems: 'center',
+            display: 'flex',
+          }}
+        >
+            <Ionicons name="qr-code-outline" size={24} style={{ transform: [{ translateX: 7 }, { translateY: -10 }] }} color="#8FD49D" />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
 
   // Setup resize plugin and frame processor only when model is loaded
   const { resize } = useResizePlugin();

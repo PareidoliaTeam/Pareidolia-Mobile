@@ -5,7 +5,8 @@ import { Directory, File, Paths } from 'expo-file-system/next';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PROFILE_KEY = 'selectedProfile';
-const MODEL_PROFILES_LIST_KEY = 'modelProfilesList';
+const MODEL_PROFILES_LIST_KEY = 'modelProfilesList'; // key to track the list of model profiles
+const MODEL_FILES_LIST_KEY = 'modelFilesList';       // key to track the files and path
 const DATASET_PROFILES_LIST_KEY = 'datasetProfilesList';
 const VIDEOS_KEY = 'profileVideos';
 const PROFILES_LIST_KEY = 'profilesList';
@@ -110,6 +111,7 @@ export const addDatasetProfile = async (name: string) => {
   const profiles = await getDatasetProfiles();
   if (!profiles.includes(name)) {
     profiles.push(name);
+    console.log("profiles: ", profiles);
     await AsyncStorage.setItem(DATASET_PROFILES_LIST_KEY, JSON.stringify(profiles));
   }
 };
@@ -142,11 +144,11 @@ export const removeModelProfile = async (name: string) => {
 };
 
 export const setModelProfilesList = async (profiles: FetchModelFilesListRes) => {
-  await AsyncStorage.setItem(MODEL_PROFILES_LIST_KEY, JSON.stringify(profiles));
+  await AsyncStorage.setItem(MODEL_FILES_LIST_KEY, JSON.stringify(profiles));
 };
 
 export const getModelProfilesList = async (): Promise<FetchModelFilesListRes> => {
-  const json = await AsyncStorage.getItem(MODEL_PROFILES_LIST_KEY);
+  const json = await AsyncStorage.getItem(MODEL_FILES_LIST_KEY);
   return json ? JSON.parse(json) : {};
 };
 
@@ -265,6 +267,9 @@ export const downloadModelFile = async (modelName: string, serverIP: string) => 
     console.log('Model saved to:', uri);
     console.log('File extension:', ext);
     console.log('File size:', fileInfo.size, 'bytes');
+    const existingModels = await getModelProfilesList();
+    setModelProfilesList({ ...existingModels, [modelName]: { path: uri } });
+    addModelProfile(modelName.replace('.tflite', '')); // Add profile without extension
     
     return uri;
 

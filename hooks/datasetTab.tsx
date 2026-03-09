@@ -19,12 +19,14 @@ type Props = {
   profiles: string[];
   router: ReturnType<typeof useRouter>;
   handleAddProfile: (name: string) => void;
+  handleRemoveProfile: (name: string) => void;
 };
 
 function useDatasetTabContent({
   profiles: datasets,
   router,
-  handleAddProfile
+  handleAddProfile,
+  handleRemoveProfile
 }: Props) {
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -44,7 +46,7 @@ function useDatasetTabContent({
         <Text style={styles.header}>Dataset Profiles</Text>
       </View> */}
       <ScrollView style={styles.container} contentContainerStyle={{paddingBottom: 40, paddingHorizontal: 20}}>
-        <TouchableOpacity
+        {/* <TouchableOpacity
           style={[styles.smallButton, { alignSelf: 'center', marginBottom: 20 }]}
           onPress={async () => {
             await logStorageUsage();
@@ -78,7 +80,7 @@ function useDatasetTabContent({
           }}
         >
           <Text style={styles.smallButtonText}>Clear Document Files</Text>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
         <View style={styles.grid}>
           {datasets.map(profile => (
@@ -167,8 +169,8 @@ const styles = StyleSheet.create({
     width: '48%',
     height: 150,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#333',
+    borderWidth: 2,
+    borderColor: '#ffffff',
   },
   addCard: {
     borderStyle: 'dashed',

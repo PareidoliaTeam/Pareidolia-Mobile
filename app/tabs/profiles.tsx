@@ -1,9 +1,9 @@
 import useDatasetTabContent from "@/hooks/datasetTab";
 import useModelTabContent from "@/hooks/modelTab";
-import { addDatasetProfile, addModelProfile, getDatasetProfiles, getModelProfiles } from "@/hooks/useVideoStorage";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
-import { StyleSheet, Text, Touchable, TouchableOpacity, View } from "react-native";
+import { addDatasetProfile, addModelProfile, clearTempDocuments, clearTmpFiles, getDatasetProfiles, getModelProfiles, logAllAppStorage, logStorageUsage, removeDatasetProfile, removeModelProfile } from "@/hooks/useVideoStorage";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Index() {
@@ -11,11 +11,13 @@ export default function Index() {
   const [profiles, setProfiles] = useState<string[]>([]);
   const [selectedTab, setSelectedTab] = useState<'dataset' | 'model'>('dataset');
 
-  useEffect(() => {
-    (async () => {
-      setProfiles(selectedTab === 'dataset' ? await getDatasetProfiles() : await getModelProfiles());
-    })();
-  }, [selectedTab]);
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        setProfiles(selectedTab === 'dataset' ? await getDatasetProfiles() : await getModelProfiles());
+      })();
+    }, [selectedTab])
+  );
 
   const handleAddProfile = async (name: string) => { 
     if (name && name.trim()) {
@@ -28,22 +30,75 @@ export default function Index() {
     }
   };
 
+  const handleRemoveProfile = async (name: string) => {
+    if (name && name.trim()) {
+      if (selectedTab === 'dataset') {
+        await removeDatasetProfile(name.trim());
+      } else {
+        await removeModelProfile(name.trim());
+      }
+      setProfiles(selectedTab === 'dataset' ? await getDatasetProfiles() : await getModelProfiles());
+    }
+  };
+
   const datasetTabContent =  useDatasetTabContent({
     profiles,
     router,
     handleAddProfile,
+    handleRemoveProfile
   });
 
   const modelTabContent = useModelTabContent({
     profiles,
     router,
     handleAddProfile,
+    handleRemoveProfile
   });
 
   
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      {/* --------- admin tools start -----------*/}
+      <View style={styles.buttonRow}>
+        <TouchableOpacity
+          style={styles.smallButton}
+          onPress={async () => {
+            await logStorageUsage();  
+          }}
+        >
+          <Text style={styles.smallButtonText}>Show Logs</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.smallButton}
+          onPress={async () => {
+            await logAllAppStorage();
+          }}
+        >
+          <Text style={styles.smallButtonText}>Show All App Storage</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.smallButton, { backgroundColor: '#8B0000' }]}
+          onPress={async () => {
+            await clearTmpFiles();
+          }}
+        >
+          <Text style={styles.smallButtonText}>Clear Tmp Files</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.smallButton, { backgroundColor: '#8B0000' }]}
+          onPress={async () => {
+            await clearTempDocuments();
+          }}
+        >
+          <Text style={styles.smallButtonText}>Clear Document Files</Text>
+        </TouchableOpacity>
+      </View>
+      {/* --------- admin tools end -----------*/}
+
       <View style={styles.tabBar}>
         {(['dataset', 'model'] as const).map(tab => (
           <TouchableOpacity
@@ -74,6 +129,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
+  buttonRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    marginTop: -20,
+    marginBottom: 4,
+  },
   tabBar: {
   flexDirection: 'row',
   paddingHorizontal: 16,
@@ -83,7 +147,7 @@ const styles = StyleSheet.create({
   gap: 8
 },
 tab: {
-  paddingVertical: 20,
+  paddingVertical: 12,
   paddingHorizontal: 20,
   marginRight: 4,
   borderTopLeftRadius: 10,
@@ -147,7 +211,7 @@ tabContent: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 40,
+    marginBottom: 12,
     textAlign: 'center',
   },
   grid: {

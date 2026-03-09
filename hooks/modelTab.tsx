@@ -9,7 +9,7 @@
  * for setting the current dataset profile and the videos associated 
  * with each profile.
  */
-import { clearTmpFiles, logAllAppStorage, logStorageUsage, setSelectedModelProfile, clearTempDocuments } from '@/hooks/useVideoStorage';
+import { clearTmpFiles, logAllAppStorage, logStorageUsage, setSelectedModelProfile, clearTempDocuments, removeModelProfile } from '@/hooks/useVideoStorage';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, Touchable, TouchableOpacity, View } from 'react-native';
@@ -19,12 +19,14 @@ type Props = {
   profiles: string[];
   router: ReturnType<typeof useRouter>;
   handleAddProfile: (name: string) => void;
+  handleRemoveProfile: (name: string) => void;
 };
 
 function useModelTabContent({
   profiles: models,
   router,
-  handleAddProfile
+  handleAddProfile,
+  handleRemoveProfile
 }: Props) {
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -44,41 +46,7 @@ function useModelTabContent({
         <Text style={styles.header}>Model Profiles</Text>
       </View> */}
       <ScrollView style={styles.container} contentContainerStyle={{paddingBottom: 40, paddingHorizontal: 20}}>
-        <TouchableOpacity
-          style={[styles.smallButton, { alignSelf: 'center', marginBottom: 20 }]}
-          onPress={async () => {
-            await logStorageUsage();
-          }}
-        >
-          <Text style={styles.smallButtonText}>Show Logs</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.smallButton, { alignSelf: 'center', marginBottom: 20 }]}
-          onPress={async () => {
-            await logAllAppStorage();
-          }}
-        >
-          <Text style={styles.smallButtonText}>Show All App Storage</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.smallButton, { alignSelf: 'center', marginBottom: 20, backgroundColor: '#8B0000' }]}
-          onPress={async () => {
-            await clearTmpFiles();
-          }}
-        >
-          <Text style={styles.smallButtonText}>Clear Tmp Files</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.smallButton, { alignSelf: 'center', marginBottom: 20, backgroundColor: '#8B0000' }]}
-          onPress={async () => {
-            await clearTempDocuments();
-          }}
-        >
-          <Text style={styles.smallButtonText}>Clear Document Files</Text>
-        </TouchableOpacity>
+        
 
         <View style={styles.grid}>
           {models.map(profile => (
@@ -92,6 +60,15 @@ function useModelTabContent({
                 }}
               >
                 <Text style={styles.smallButtonText}>Set Profile</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.smallButton, { marginTop: 8, backgroundColor: '#8B0000' }]}
+                onPress={async () => {
+                  await handleRemoveProfile(profile);
+                  console.log(`Deleted model profile: ${profile}`);
+                }}
+              >
+                <Text style={styles.smallButtonText}>Delete Profile</Text>
               </TouchableOpacity>
               {/* <TouchableOpacity
                 style={[styles.smallButton, { marginTop: 6 }]} 
@@ -168,7 +145,7 @@ const styles = StyleSheet.create({
     height: 150,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: '#ffffff',
   },
   addCard: {
     borderStyle: 'dashed',

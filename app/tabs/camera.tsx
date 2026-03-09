@@ -6,6 +6,9 @@ import { getSelectedDatasetProfile, addProfileVideo } from '@/hooks/useVideoStor
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from "expo-router";
 import { useServer } from '@/contexts/ServerContext'; // Context hook for sharing server IP
+import { useLayoutEffect } from 'react';
+import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function CameraScreen() {
     const router = useRouter();
@@ -15,6 +18,27 @@ export default function CameraScreen() {
     const [prediction, setPrediction] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [profile, setProfile] = useState<string | null>(null);
+    const navigation = useNavigation();
+    
+    useLayoutEffect(() => {
+        navigation.getParent()?.setOptions({
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => router.push('/qrScanner')}
+              style={{
+                marginRight: 12,
+                width: 56,
+                height: 56,
+                justifyContent: 'center',
+                alignItems: 'center',
+                display: 'flex',
+              }}
+            >
+                <Ionicons name="qr-code-outline" size={24} style={{ transform: [{ translateX: 7 }, { translateY: -10 }] }} color="#8FD49D" />
+            </TouchableOpacity>
+          ),
+        });
+      }, [navigation]);
 
     // Fetch selected profile on mount and when screen is focused
     useFocusEffect(
@@ -76,9 +100,9 @@ export default function CameraScreen() {
             <Text style={styles.modelStatus}>Server IP: {serverIP ?? 'Not Connected'}</Text>
 
             <View style={styles.buttonContainer}>
-                <TouchableOpacity style={styles.button} onPress={() => router.push('/qrScanner')}>
+                {/* <TouchableOpacity style={styles.button} onPress={() => router.push('/qrScanner')}>
                     <Text style={styles.buttonText}>Establish Connection</Text>
-                </TouchableOpacity>
+                </TouchableOpacity> */}
 
                 <TouchableOpacity style={styles.button} onPress={takePhoto}>
                     <Text style={styles.buttonText}> Take Photo</Text>
