@@ -164,7 +164,7 @@ export default function ReceiveScreen() {
       // setDesktopVideoList(dict); // Example of using file list to set desktop video list
       console.log('Fetch complete. Files received:', dict);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch files');
+      setError(err instanceof Error ? err.message + "\nCheck desktop/server connection" : 'Failed to fetch files');
     } finally {
       setLoading(false);
     }
@@ -202,7 +202,7 @@ export default function ReceiveScreen() {
 
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch model');
+      setError(err instanceof Error ? err.message + "\nCheck desktop/server connection" : 'Failed to fetch model');
     } finally {
       setLoading(false);
       setDownloading(null);
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   title: {
-    marginTop: 60,
+    marginTop: 20,
     marginBottom: 20,
   },
   statusContainer: {
