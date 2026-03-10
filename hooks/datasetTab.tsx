@@ -42,45 +42,8 @@ function useDatasetTabContent({
         }}
         onCancel={() => setModalVisible(false)}
       />
-      {/* <View style={styles.titleContainer}>
-        <Text style={styles.header}>Dataset Profiles</Text>
-      </View> */}
+   
       <ScrollView style={styles.container} contentContainerStyle={{paddingBottom: 40, paddingHorizontal: 20}}>
-        {/* <TouchableOpacity
-          style={[styles.smallButton, { alignSelf: 'center', marginBottom: 20 }]}
-          onPress={async () => {
-            await logStorageUsage();
-          }}
-        >
-          <Text style={styles.smallButtonText}>Show Logs</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.smallButton, { alignSelf: 'center', marginBottom: 20 }]}
-          onPress={async () => {
-            await logAllAppStorage();
-          }}
-        >
-          <Text style={styles.smallButtonText}>Show All App Storage</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.smallButton, { alignSelf: 'center', marginBottom: 20, backgroundColor: '#8B0000' }]}
-          onPress={async () => {
-            await clearTmpFiles();
-          }}
-        >
-          <Text style={styles.smallButtonText}>Clear Tmp Files</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.smallButton, { alignSelf: 'center', marginBottom: 20, backgroundColor: '#8B0000' }]}
-          onPress={async () => {
-            await clearTempDocuments();
-          }}
-        >
-          <Text style={styles.smallButtonText}>Clear Document Files</Text>
-        </TouchableOpacity> */}
 
         <View style={styles.grid}>
           {datasets.map(profile => (

@@ -7,16 +7,6 @@ export default function TabsLayout() {
 
   return (
     <>
-      {/* <Stack.Screen
-        options={{
-          headerRight: () => (
-            <TouchableOpacity onPress={() => router.push('/qrScanner')} style={{ marginRight: 16, padding: 10 }}>
-              <Ionicons name="qr-code-outline" size={24} style={{ transform: [{ translateX: 8 }, { translateY: -4 }] }} color="#8FD49D" />
-            </TouchableOpacity>
-          ),
-        }}
-      /> */}
-
       <Tabs
         screenOptions={{
           headerShown: false,

@@ -219,11 +219,6 @@ export default function ProfileVideos() {
     };
 
     checkAgainstSentList();
-
-    // performUpload();
-
-    // Implement upload logic here, using serverIP from context
-    // alert(`Uploading ${selectedVideos.size} videos to server at ${serverIP}`);
   };
 
   const checkAgainstSentList = async () => {
@@ -243,12 +238,6 @@ export default function ProfileVideos() {
             notSent.push(fileName);
         }
     }
-
-    // Save once after the loop
-    // await setDesktopVideosSent(updatedSent);
-
-    // const updated = await getDesktopVideosSent();
-    // console.log(updated);
 
     if (alreadySent.length > 0) {
       Alert.alert(
@@ -275,7 +264,6 @@ export default function ProfileVideos() {
       setUploadStatus(null);
 
       try {
-        // ...existing code...
         const base64 = await readAsStringAsync(uri!, {
           encoding: 'base64',
         });
@@ -431,7 +419,6 @@ export default function ProfileVideos() {
       </Text>
       <Button title="Print Sent Videos List" onPress={printSentVideos} />
       <Button title="Add Video" onPress={pickVideo} />
-      {/* <Button title={`Toggle Controls (${toggle ? "On" : "Off"})`} onPress={handleToggle} /> */}
 
       {toggle && selectedVideos.size > 0 && (
         <Button title="Upload Selected" onPress={handleUpload} />
