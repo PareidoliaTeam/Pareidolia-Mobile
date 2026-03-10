@@ -1,9 +1,32 @@
-import { useRouter } from "expo-router";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useNavigation, useRouter } from "expo-router";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useLayoutEffect } from "react";
+import { Ionicons } from '@expo/vector-icons';
 
 export default function LandingScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
+
+  useLayoutEffect(() => {
+    navigation.getParent()?.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={() => router.push('/qrScanner')}
+          style={{
+            marginRight: 12,
+            width: 56,
+            height: 56,
+            justifyContent: 'center',
+            alignItems: 'center',
+            display: 'flex',
+          }}
+        >
+            <Ionicons name="qr-code-outline" size={24} style={{ transform: [{ translateX: 7 }, { translateY: -10 }] }} color="#8FD49D" />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
