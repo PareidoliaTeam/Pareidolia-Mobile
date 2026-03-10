@@ -8,8 +8,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function Index() {
   const router = useRouter();
   const [profiles, setProfiles] = useState<string[]>([]);
-  
-  
 
   useEffect(() => {
     (async () => {
@@ -22,7 +20,6 @@ export default function Index() {
       await addProfile(name.trim());
       setProfiles(await getProfiles());
     }
-
   };
 
   const datasetTabContent =  useDatasetTabContent({
