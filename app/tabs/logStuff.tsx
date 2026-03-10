@@ -148,14 +148,6 @@ export default function ReceiveScreen() {
       // Parse JSON response from server
       const data: FetchModelFilesListRes = await response.json();
       
-      // Transform array into nested dictionary
-      // const dict: FileDict = {};
-      // for (const file of data.files) {
-      //   const dataset = file.datasetName ?? 'Unknown';
-      //   if (!dict[dataset]) dict[dataset] = {};
-      //   const { name, datasetName, ...fields } = file;
-      //   dict[dataset][name] = fields;
-      // }
       const dict: FetchModelFilesListRes = data; // Assuming server already sends in desired format
 
       setFiles(dict);
@@ -183,18 +175,6 @@ export default function ReceiveScreen() {
 
     try {
       setDownloading(modelName);
-      // const baseURL = serverIP.replace(/\/$/, '');
-      // const fetchURL = baseURL.startsWith('http') 
-      //   ? `${baseURL}/get-models`
-      //   : `http://${baseURL}:3001/get-models`;
-      
-      // // Make GET request to server (no body needed for GET)
-      // const response = await fetch(fetchURL);
-      
-      // // Check HTTP status code (200-299 = success)
-      // if (!response.ok) {
-      //   throw new Error(`HTTP error! status: ${response.status}`);
-      // }
       await downloadModelFile(modelName, serverIP);
       setDownloadedModelMessage(`Model ${modelName} downloaded successfully.`);
       console.log(`Model ${modelName} downloaded successfully.`);

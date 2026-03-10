@@ -42,9 +42,7 @@ function useModelTabContent({
         }}
         onCancel={() => setModalVisible(false)}
       />
-      {/* <View style={styles.titleContainer}>
-        <Text style={styles.header}>Model Profiles</Text>
-      </View> */}
+     
       <ScrollView style={styles.container} contentContainerStyle={{paddingBottom: 40, paddingHorizontal: 20}}>
         
 
@@ -70,12 +68,7 @@ function useModelTabContent({
               >
                 <Text style={styles.smallButtonText}>Delete Profile</Text>
               </TouchableOpacity>
-              {/* <TouchableOpacity
-                style={[styles.smallButton, { marginTop: 6 }]} 
-                onPress={() => router.push({ pathname: '/profileVideos', params: { profile } })}
-              >
-                <Text style={styles.smallButtonText}>View Videos</Text>
-              </TouchableOpacity> */}
+              
             </View>
           ))}
           
@@ -144,7 +137,7 @@ const styles = StyleSheet.create({
     width: '48%',
     height: 150,
     marginBottom: 16,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#ffffff',
   },
   addCard: {

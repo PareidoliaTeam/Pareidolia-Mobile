@@ -100,10 +100,6 @@ export default function CameraScreen() {
             <Text style={styles.modelStatus}>Server IP: {serverIP ?? 'Not Connected'}</Text>
 
             <View style={styles.buttonContainer}>
-                {/* <TouchableOpacity style={styles.button} onPress={() => router.push('/qrScanner')}>
-                    <Text style={styles.buttonText}>Establish Connection</Text>
-                </TouchableOpacity> */}
-
                 <TouchableOpacity style={styles.button} onPress={takePhoto}>
                     <Text style={styles.buttonText}> Take Photo</Text>
                 </TouchableOpacity>
