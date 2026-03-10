@@ -59,6 +59,7 @@ type FetchLabelsFilesRes = {
 type FetchModelFilesListRes = {
   [modelName: string]: {
     path: string;
+    labels: string[]; // needs to change across everywhere
   };
 }
 

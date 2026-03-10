@@ -14,6 +14,7 @@ const IP_KEY = 'serverIP';
 const DESKTOP_VIDEOS_SENT_KEY = 'desktopVideosSent';
 const DATASET_PROFILE_KEY = 'selectedDatasetProfile';
 const MODEL_PROFILE_KEY = 'selectedModelProfile';
+const MOUNTED_MODEL_KEY = 'mountedModel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ type FileDict = {
 type FetchModelFilesListRes = {
   [modelName: string]: {
     path: string;
+    labels: string[]; // needs to change across everywhere
   };
 };
 
@@ -39,6 +41,13 @@ type FetchLabelsFilesRes = {
     path: string;
   };
 };
+
+type MountedModelInfo = {
+  [modelName: string]: {
+    path: string;
+    labels: string[];
+  };
+}
 
 // ─── File System Initialization ───────────────────────────────────────────────
 
@@ -150,6 +159,19 @@ export const setModelProfilesList = async (profiles: FetchModelFilesListRes) => 
 export const getModelProfilesList = async (): Promise<FetchModelFilesListRes> => {
   const json = await AsyncStorage.getItem(MODEL_FILES_LIST_KEY);
   return json ? JSON.parse(json) : {};
+};
+
+// ─── Model Mounting ───────────────────────────────────────────────────────────
+export const getMountedModelInfo = async (): Promise<MountedModelInfo> => {
+  const json = await AsyncStorage.getItem(MOUNTED_MODEL_KEY);
+  return json ? JSON.parse(json) : {};
+};
+
+export const setMountedModelInfo = async (modelName: string, path: string, labels: string[]) => {
+  const newInfo = {
+    [modelName]: { path, labels },
+  };
+  await AsyncStorage.setItem(MOUNTED_MODEL_KEY, JSON.stringify(newInfo));
 };
 
 // ─── Videos ───────────────────────────────────────────────────────────────────
@@ -268,7 +290,10 @@ export const downloadModelFile = async (modelName: string, serverIP: string) => 
     console.log('File extension:', ext);
     console.log('File size:', fileInfo.size, 'bytes');
     const existingModels = await getModelProfilesList();
-    setModelProfilesList({ ...existingModels, [modelName]: { path: uri } });
+
+    // TODO: get labels from server and save them here too, then pass to model loading screen to load them into TF Lite interpreter
+    setModelProfilesList({ ...existingModels, [modelName]: { path: uri, labels: [] } });
+    
     addModelProfile(modelName.replace('.tflite', '')); // Add profile without extension
     
     return uri;
