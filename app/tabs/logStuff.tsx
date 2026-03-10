@@ -153,7 +153,6 @@ export default function ReceiveScreen() {
       setFiles(dict);
       setLastFetch(new Date().toLocaleTimeString());
 
-      // setDesktopVideoList(dict); // Example of using file list to set desktop video list
       console.log('Fetch complete. Files received:', dict);
     } catch (err) {
       setError(err instanceof Error ? err.message + "\nCheck desktop/server connection" : 'Failed to fetch files');
