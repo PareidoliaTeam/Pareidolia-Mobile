@@ -59,9 +59,13 @@ type FetchLabelsFilesRes = {
 type FetchModelFilesListRes = {
   [modelName: string]: {
     path: string;
-    labels: string[]; // needs to change across everywhere
+    labels: {
+      [labelName: string]: {
+        [datasetName: string]: { path: string };
+      };
+    };
   };
-}
+};
 
 export default function ReceiveScreen() {
   // Get server IP from Context (set by QR scanner on Connect tab)

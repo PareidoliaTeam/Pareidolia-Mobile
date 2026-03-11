@@ -32,7 +32,20 @@ type FileDict = {
 type FetchModelFilesListRes = {
   [modelName: string]: {
     path: string;
-    labels: string[]; // needs to change across everywhere
+    labels: {
+      [labelName: string]: {
+        [datasetName: string]: { path: string };
+      };
+    };
+  };
+};
+
+type ModelDetails = {
+  path: string;
+  labels: {
+    [labelName: string]: {
+      [datasetName: string]: { path: string };
+    };
   };
 };
 
@@ -290,10 +303,14 @@ export const downloadModelFile = async (modelName: string, serverIP: string) => 
     console.log('File extension:', ext);
     console.log('File size:', fileInfo.size, 'bytes');
     const existingModels = await getModelProfilesList();
+    const modelLabels = await retrieveModelDetails(modelName, serverIP);
 
     // TODO: get labels from server and save them here too, then pass to model loading screen to load them into TF Lite interpreter
-    setModelProfilesList({ ...existingModels, [modelName]: { path: uri, labels: [] } });
-    
+    setModelProfilesList({ ...existingModels, [modelName]: { path: uri, labels: modelLabels?.labels || {} } });
+
+    const aList = await getModelProfilesList();
+    console.log("Updated model profiles list: ", aList);
+
     addModelProfile(modelName.replace('.tflite', '')); // Add profile without extension
     
     return uri;
@@ -301,6 +318,37 @@ export const downloadModelFile = async (modelName: string, serverIP: string) => 
   } catch (error) {
     console.error('Error downloading model:', error);
     throw error; // re-throw so the caller can handle it
+  }
+};
+
+export const retrieveModelDetails = async (modelName: string, serverIP: string): Promise<ModelDetails | null> => {
+  if(!serverIP) {
+    console.error('Server IP is not set');
+    return null;
+  }
+
+  try {
+    const baseURL = serverIP.replace(/\/$/, '');
+    const fetchURL = baseURL.startsWith('http')
+      ? `${baseURL}/get-model-details?modelName=${modelName}`
+      : `http://${baseURL}:3001/get-model-details?modelName=${modelName}`;
+    console.log("modelName: ", modelName);
+    console.log("serverIP: ", serverIP);
+    console.log("fetchURL: ", fetchURL);
+
+    const response = await fetch(fetchURL);
+    if (!response.ok) {
+      console.error('Failed to fetch model details:', response.status, response.statusText);
+      return null;
+    }
+
+    const data: ModelDetails = await response.json();
+    console.log('Received model details:', data);
+
+    return data;
+  } catch (error) {
+    console.error('Error fetching model details:', error);
+    return null;
   }
 };
 
