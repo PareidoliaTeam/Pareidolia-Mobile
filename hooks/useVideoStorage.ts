@@ -275,15 +275,16 @@ export const downloadModelFile = async (modelName: string, serverIP: string) => 
   console.log("serverIP: ", serverIP);
   console.log("downloadURL: ", downloadURL);
   try {
-    const dest = new File(new Directory(Paths.document, 'models'), modelName);
+    const safeName = modelName.endsWith('.tflite') ? modelName : `${modelName}.tflite`;
+    const dest = new File(new Directory(Paths.document, 'models'), safeName);
     console.log("dest uri: ", dest.uri);
 
-    const fileExists = await getInfoAsync(dest.uri + ".tflite");
+    const fileExists = await getInfoAsync(dest.uri);
     if (fileExists.exists) {
-      await deleteAsync(dest.uri + ".tflite");
+      await deleteAsync(dest.uri);
     }
 
-    const { uri, status } = await downloadAsync(downloadURL, dest.uri + ".tflite");
+    const { uri, status } = await downloadAsync(downloadURL, dest.uri);
 
     if (status !== 200) {
       throw new Error(`Server returned status ${status}`);
@@ -309,10 +310,11 @@ export const downloadModelFile = async (modelName: string, serverIP: string) => 
     setModelProfilesList({ ...existingModels, [modelName]: { path: uri, labels: modelLabels?.labels || {} } });
 
     const aList = await getModelProfilesList();
-    console.log("Updated model profiles list: ", aList);
+    console.log("Updated model profiles list: ", JSON.stringify(aList, null, 2));
 
     addModelProfile(modelName.replace('.tflite', '')); // Add profile without extension
-    
+    // setMountedModelInfo(modelName.replace('.tflite', ''), uri, modelLabels ? Object.keys(modelLabels.labels) : []); // Set mounted model to the newly downloaded model
+
     return uri;
 
   } catch (error) {
