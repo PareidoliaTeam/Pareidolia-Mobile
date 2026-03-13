@@ -11,21 +11,18 @@
 import { useTensorflowModel } from "@/hooks/useTensorFlowModel"; // hook to load the model
 import { getModelProfilesList, getSelectedModelProfile } from "@/hooks/useVideoStorage";
 import { Ionicons } from '@expo/vector-icons'; // For icons in the header
-import { useNavigation, useRouter } from "expo-router";
-import { useEffect, useLayoutEffect, useRef, useState } from "react"; // useState for state management, useRef for camera reference
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
+import { use, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"; // useState for state management, useRef for camera reference
 import { Button, StyleSheet, Text, TouchableOpacity, View } from "react-native"; // RN components
 import { Camera, useCameraDevices, useFrameProcessor } from 'react-native-vision-camera'; // For continuous camera feed
 import { useResizePlugin } from 'vision-camera-resize-plugin'; // For resizing frames
-
-
-const labels = ['roses', 'daisy', 'dandelion', 'sunflowers', 'tulips']; // Example labels for flower classification
+import { useRunOnJS, useSharedValue } from 'react-native-worklets-core';
 
 export default function Index() {
   // Get available camera devices (must be inside component)
   const devices = useCameraDevices();
   const device = devices.find(device => device.position === 'back');
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-  // const { model, loading, error } = useTensorflowModel(); // expects uint8 of shape (1, 180, 180, 3) which is batch size 1, images of 180 x 180, 3 color channels
   const cameraRef = useRef<Camera>(null);
   const navigation = useNavigation();
   const router = useRouter();
@@ -33,36 +30,63 @@ export default function Index() {
   const [modelLabels, setModelLabels] = useState<string[]>([]);
   const [inputShape, setInputShape] = useState<number[] | null>(null);
   const [outputShape, setOutputShape] = useState<number[] | null>(null);
-
-  useEffect(() => {
-    const load = async () => {
-      const modelName = await getSelectedModelProfile();
-      const profiles = await getModelProfilesList();
-      const profile = profiles[modelName || ''];
-      if (profile) {
-        setModelPath(profile.path);
-        const loadedLabels = Object.keys(profile.labels);
-        setModelLabels(loadedLabels);
-        console.log(`Loaded model profile: ${modelName} with path: ${profile.path} and labels: ${loadedLabels}`);
-      } else {
-        console.warn('No model profile found for selected profile:', modelName);
-      }
-    };
-    load();
+  const [displayLabel, setDisplayLabel] = useState<string>(''); // State to hold the label to display on the screen
+  const lastLabel = useSharedValue("");
+  const updateDisplayLabel = useRunOnJS((label: string) => {
+    setDisplayLabel((prev) => (prev === label ? prev : label));
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      // Reset state when screen is focused
+      setIsCameraOpen(false);
+      setDisplayLabel('');
+    }, [])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const load = async () => {
+        const modelName = await getSelectedModelProfile();
+        const profiles = await getModelProfilesList();
+        if(!isActive) return;
+
+        const profile = profiles[modelName?.trim() || ''] || null;
+        if (profile) {
+          setModelPath(profile.path);
+          const loadedLabels = Object.keys(profile.labels);
+          setModelLabels(loadedLabels);
+          console.log(`Loaded model profile: ${modelName} with path: ${profile.path} and labels: ${loadedLabels}`);
+        } else {
+          console.warn('No model profile found for selected profile:', modelName);
+        }
+      };
+      load();
+
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
 
   const { model, loading, error } = useTensorflowModel(modelPath); // Load the model using the path from storage
   
-  useEffect(() => {
-    if (model) {
+  useFocusEffect(
+    useCallback(() => {
+      if (!model) return;
       const inputShape = model.inputs[0].shape; // Assuming single input tensor
       const outputShape = model.outputs[0].shape; // Assuming single output tensor
       setInputShape(inputShape);
       setOutputShape(outputShape);
       console.log('Model input shape:', inputShape);
       console.log('Model output shape:', outputShape);
-    }
-  }, [model]);
+      return () => {
+
+      };
+    }, [model])
+  );
 
   useLayoutEffect(() => {
     navigation.getParent()?.setOptions({
@@ -105,7 +129,12 @@ export default function Index() {
 
     console.log('Predicted Label: ', predictedLabel);
     console.log('RES: ', res);
-  }, [model]);
+    if (predictedLabel !== lastLabel.value) {
+      lastLabel.value = predictedLabel;
+      updateDisplayLabel(predictedLabel);
+    }
+
+  }, [model, inputShape, modelLabels, updateDisplayLabel, lastLabel]);
 
   const handleOpenCamera = async () => {
     const permission = await Camera.requestCameraPermission();
@@ -130,7 +159,7 @@ export default function Index() {
       }}
     >
       <Text style={{ fontSize: 18, marginBottom: 20 }}>Flower Classifier</Text>
-
+      <Text style={{ fontSize: 16, marginBottom: 20 }}>{displayLabel}</Text>
       {!isCameraOpen && (
         <>
           <View style={{ height: 10 }} />
