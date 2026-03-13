@@ -170,7 +170,7 @@ export default function Index() {
       {isCameraOpen && device && (
         
         <View style={{ alignItems: 'center' }}>
-            <TouchableOpacity style={styles.closeButton} onPress={() => setIsCameraOpen(false)} >
+            <TouchableOpacity style={styles.closeButton} onPress={() => {setIsCameraOpen(false); setDisplayLabel('')}} >
             <Text style={{color: "blue"}}>
                 Close Camera
             </Text>
