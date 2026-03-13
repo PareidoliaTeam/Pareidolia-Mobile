@@ -1,9 +1,9 @@
 /*
  *   Author: Armando Vega
- *   Date Created: 9 Feb 2026
+ *   Date Created: 9 February 2026
  *
  *   Last Modified By: Armando Vega
- *   Date Last Modified: 9 Feb 2026
+ *   Date Last Modified: 13 March 2026
  *
  *   Description: Tab that allows users to continuously classify what the camera sees in real time.
  */
@@ -19,19 +19,22 @@ import { useResizePlugin } from 'vision-camera-resize-plugin'; // For resizing f
 import { useRunOnJS, useSharedValue } from 'react-native-worklets-core';
 
 export default function Index() {
-  // Get available camera devices (must be inside component)
   const devices = useCameraDevices();
   const device = devices.find(device => device.position === 'back');
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const cameraRef = useRef<Camera>(null);
+
   const navigation = useNavigation();
   const router = useRouter();
+  
   const [modelPath, setModelPath] = useState<string | null>(null);
   const [modelLabels, setModelLabels] = useState<string[]>([]);
   const [inputShape, setInputShape] = useState<number[] | null>(null);
   const [outputShape, setOutputShape] = useState<number[] | null>(null);
   const [displayLabel, setDisplayLabel] = useState<string>(''); // State to hold the label to display on the screen
   const lastLabel = useSharedValue("");
+
+  // updating display label from the frame processor using useRunOnJS to run on the JS thread
   const updateDisplayLabel = useRunOnJS((label: string) => {
     setDisplayLabel((prev) => (prev === label ? prev : label));
   }, []);
@@ -44,6 +47,7 @@ export default function Index() {
     }, [])
   );
 
+  // Load the model profile and associated labels when the screen is focused
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
@@ -73,6 +77,7 @@ export default function Index() {
 
   const { model, loading, error } = useTensorflowModel(modelPath); // Load the model using the path from storage
   
+  // Once the model is loaded, get the input and output shapes for processing frames correctly
   useFocusEffect(
     useCallback(() => {
       if (!model) return;
@@ -88,6 +93,7 @@ export default function Index() {
     }, [model])
   );
 
+  // Set up header button to navigate to QR Scanner
   useLayoutEffect(() => {
     navigation.getParent()?.setOptions({
       headerRight: () => (
@@ -110,6 +116,17 @@ export default function Index() {
 
   // Setup resize plugin and frame processor only when model is loaded
   const { resize } = useResizePlugin();
+
+  /**
+   * @description Frame processor that runs on each frame to take the YUV frame, convert it
+   * to RGB, resize it to the input shape of the model, run the inference and display the 
+   * corresponding label based on the output
+   * @params frame - the camera frame to process
+   * @returns void
+   * @notes - The frame processor runs on a separate thread and uses worklets, so we use 
+   * useRunOnJS to update the display label on the JS thread. The predicted label is only 
+   * updated if it changes from the last predicted label to avoid unnecessary re-renders.
+   */
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet';
     if (!model) return;
@@ -136,6 +153,10 @@ export default function Index() {
 
   }, [model, inputShape, modelLabels, updateDisplayLabel, lastLabel]);
 
+  /**
+   * @description Handles opening the camera for live classification
+   * @returns {Promise<void>}
+   */
   const handleOpenCamera = async () => {
     const permission = await Camera.requestCameraPermission();
     if (permission == 'denied') {

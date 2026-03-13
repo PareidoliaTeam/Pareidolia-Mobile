@@ -10,7 +10,7 @@ export default function Index() {
       <View style={styles.content}>
         <TouchableOpacity 
           style={styles.button}
-          onPress={() => router.push('/tabs/landing')}
+          onPress={() => router.push('/tabs/profiles')}
         >
           <Text style={styles.buttonText}>Enter App</Text>
         </TouchableOpacity>

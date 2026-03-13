@@ -1,16 +1,52 @@
+/*
+ * Author: Armando Vega
+ * Date Created: 2026 January 15
+ * 
+ * Last Modified By: Armando Vega
+ * Date Last Modified: 2026 March 13
+ * 
+ * Description : Lists all dataset and model profiles stored in the app. The user can swap between dataset and model profile views using
+ * tabs at the top. Users can set their selected profile for both datasets and models by clicking on the profile card, which will then be 
+ * used in the camera and classify tabs. Profiles can also be deleted from this screen. This screen also includes some admin tools for debugging, 
+ * such as logging storage usage and clearing temporary files.
+ */
+
 import useDatasetTabContent from "@/hooks/datasetTab";
 import useModelTabContent from "@/hooks/modelTab";
 import { addDatasetProfile, addModelProfile, clearTempDocuments, clearTmpFiles, getDatasetProfiles, getModelProfiles, logAllAppStorage, logStorageUsage, removeDatasetProfile, removeModelProfile } from "@/hooks/useVideoStorage";
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useRouter, useNavigation } from "expo-router";
+import { useCallback, useState, useLayoutEffect } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from '@expo/vector-icons'; // For icons in the header
 
 export default function Index() {
   const router = useRouter();
   const [profiles, setProfiles] = useState<string[]>([]);
   const [selectedTab, setSelectedTab] = useState<'dataset' | 'model'>('dataset');
+  const navigation = useNavigation();
 
+  useLayoutEffect(() => {
+        navigation.getParent()?.setOptions({
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => router.push('/qrScanner')}
+              style={{
+                marginRight: 12,
+                width: 56,
+                height: 56,
+                justifyContent: 'center',
+                alignItems: 'center',
+                display: 'flex',
+              }}
+            >
+                <Ionicons name="qr-code-outline" size={24} style={{ transform: [{ translateX: 7 }, { translateY: -10 }] }} color="#8FD49D" />
+            </TouchableOpacity>
+          ),
+        });
+      }, [navigation]);
+
+  // determines which display to show
   useFocusEffect(
     useCallback(() => {
       (async () => {
@@ -19,6 +55,10 @@ export default function Index() {
     }, [selectedTab])
   );
 
+  /**
+   * @description handles the adding of profiles depending on if it's a dataset or a model profile
+   * @param name 
+   */
   const handleAddProfile = async (name: string) => { 
     if (name && name.trim()) {
       if (selectedTab === 'dataset') {
@@ -30,6 +70,10 @@ export default function Index() {
     }
   };
 
+  /**
+   * @description handles the removal of profiles depending on if it's a dataset or a model profile
+   * @param name
+   */
   const handleRemoveProfile = async (name: string) => {
     if (name && name.trim()) {
       if (selectedTab === 'dataset') {

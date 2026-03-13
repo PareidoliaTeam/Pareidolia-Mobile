@@ -1,3 +1,16 @@
+/**
+ * Author: Armando Vega
+ * Date Created: 15 January 2026
+ * 
+ * Last Modified By: Armando Vega
+ * Date Last Modified: 13 March 2026
+ * 
+ * Description: Holds all AsyncStorage interactions and file system management for the app, including:
+ * - Managing dataset and model profiles (create, delete, select)
+ * - Storing and retrieving videos associated with dataset profiles
+ * - Downloading model files from the server and storing them locally
+ * - Cleaning up temporary files created during video recording and model downloading
+ */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deleteAsync, downloadAsync, getInfoAsync } from 'expo-file-system/legacy';
 import { Directory, File, Paths } from 'expo-file-system/next';
@@ -7,14 +20,14 @@ import { Directory, File, Paths } from 'expo-file-system/next';
 const PROFILE_KEY = 'selectedProfile';
 const MODEL_PROFILES_LIST_KEY = 'modelProfilesList'; // key to track the list of model profiles
 const MODEL_FILES_LIST_KEY = 'modelFilesList';       // key to track the files and path
-const DATASET_PROFILES_LIST_KEY = 'datasetProfilesList';
-const VIDEOS_KEY = 'profileVideos';
+const DATASET_PROFILES_LIST_KEY = 'datasetProfilesList'; // tracks list of dataset profiles to be loaded into profile tab
+const VIDEOS_KEY = 'profileVideos';                      // key to track videos associated with each dataset profile, stored as { [profileName]: [videoUri1, videoUri2, ...] }
 const PROFILES_LIST_KEY = 'profilesList';
-const IP_KEY = 'serverIP';
-const DESKTOP_VIDEOS_SENT_KEY = 'desktopVideosSent';
-const DATASET_PROFILE_KEY = 'selectedDatasetProfile';
-const MODEL_PROFILE_KEY = 'selectedModelProfile';
-const MOUNTED_MODEL_KEY = 'mountedModel';
+const IP_KEY = 'serverIP';                               // key to store the server IP address 
+const DESKTOP_VIDEOS_SENT_KEY = 'desktopVideosSent';     // list of videos sent to the desktop client/server
+const DATASET_PROFILE_KEY = 'selectedDatasetProfile';    // key to store the currently selected dataset profile name
+const MODEL_PROFILE_KEY = 'selectedModelProfile';        // key to store the currently selected model profile name
+const MOUNTED_MODEL_KEY = 'mountedModel';                // 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -148,7 +161,7 @@ export const removeDatasetProfile = async (name: string) => {
 
 export const getModelProfiles = async (): Promise<string[]> => {
   const json = await AsyncStorage.getItem(MODEL_PROFILES_LIST_KEY);
-  return json ? JSON.parse(json) : ['Model A', 'Model B', 'Model C'];
+  return json ? JSON.parse(json) : [];
 };
 
 export const addModelProfile = async (name: string) => {
@@ -160,9 +173,26 @@ export const addModelProfile = async (name: string) => {
 };
 
 export const removeModelProfile = async (name: string) => {
-  const profiles = await getModelProfiles();
-  const filtered = profiles.filter(p => p !== name);
-  await AsyncStorage.setItem(MODEL_PROFILES_LIST_KEY, JSON.stringify(filtered));
+  // Delete the physical .tflite file
+  const profiles = await getModelProfilesList();
+  const entry = profiles[name] || profiles[`${name}.tflite`];
+  if (entry?.path) {
+    try {
+      const file = new File(entry.path);
+      if (file.exists) file.delete();
+    } catch (e) {
+      console.warn('Failed to delete model file:', e);
+    }
+  }
+
+  // Remove from both AsyncStorage keys
+  const nameList = await getModelProfiles();
+  await AsyncStorage.setItem(MODEL_PROFILES_LIST_KEY, JSON.stringify(nameList.filter(p => p !== name)));
+
+  const fileList = await getModelProfilesList();
+  delete fileList[name];
+  delete fileList[`${name}.tflite`];
+  await AsyncStorage.setItem(MODEL_FILES_LIST_KEY, JSON.stringify(fileList));
 };
 
 export const setModelProfilesList = async (profiles: FetchModelFilesListRes) => {

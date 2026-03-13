@@ -1,4 +1,10 @@
 /**
+ * Author: Alexangelo Orozco Gutierrez
+ * Date Created: 2026 January 15
+ * 
+ * Last Modified By: Armando Vega
+ * Date Last Modified: 2026 March 13
+ * 
  * QR Code Scanner Screen
  * 
  * This component uses expo-camera to scan QR codes containing server IP addresses.
