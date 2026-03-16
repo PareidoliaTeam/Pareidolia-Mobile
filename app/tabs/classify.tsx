@@ -26,6 +26,8 @@ export default function Index() {
 
   const navigation = useNavigation();
   const router = useRouter();
+
+  const [selectedModelProfileName, setSelectedModelProfileName] = useState<string | null>(null);
   
   const [modelPath, setModelPath] = useState<string | null>(null);
   const [modelLabels, setModelLabels] = useState<string[]>([]);
@@ -62,6 +64,7 @@ export default function Index() {
           setModelPath(profile.path);
           const loadedLabels = Object.keys(profile.labels);
           setModelLabels(loadedLabels);
+          setSelectedModelProfileName(modelName);
           console.log(`Loaded model profile: ${modelName} with path: ${profile.path} and labels: ${loadedLabels}`);
         } else {
           console.warn('No model profile found for selected profile:', modelName);
@@ -179,7 +182,7 @@ export default function Index() {
         padding: 20,
       }}
     >
-      <Text style={{ fontSize: 18, marginBottom: 20 }}>Flower Classifier</Text>
+      <Text style={{ fontSize: 18, marginBottom: 20 }}>{selectedModelProfileName || 'Unknown'} Classifier</Text>
       <Text style={{ fontSize: 16, marginBottom: 20 }}>{displayLabel}</Text>
       {!isCameraOpen && (
         <>

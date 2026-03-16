@@ -179,7 +179,10 @@ export const removeModelProfile = async (name: string) => {
   if (entry?.path) {
     try {
       const file = new File(entry.path);
-      if (file.exists) file.delete();
+      if (file.exists) {
+        file.delete();
+        console.log(`Deleted model file successfully: ${entry.path}`);
+      }
     } catch (e) {
       console.warn('Failed to delete model file:', e);
     }
