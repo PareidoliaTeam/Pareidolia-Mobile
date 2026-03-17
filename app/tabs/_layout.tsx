@@ -1,7 +1,20 @@
+/*
+ * Author: Armando Vega
+ * Date Created: 2026 January 15
+ * 
+ * Last Modified By: Armando Vega
+ * Date Last Modified: 2026 March 13
+ * 
+ * Description : This file defines the layout for the tabs in the application, 
+ * including the icons and styles for each tab. It uses the Expo Router to manage 
+ * navigation between different screens in the app. Each tab is associated with a 
+ * specific screen and has its own icon and label for easy identification by the user.
+ */
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, Tabs, useRouter } from 'expo-router';
 import { TouchableOpacity } from 'react-native';
 
+// Shows the tabs information and icons at the bottom
 export default function TabsLayout() {
   const router = useRouter();
 

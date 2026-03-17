@@ -1,14 +1,25 @@
+/*
+ * Author: Armando Vega
+ * Date Created: 2026 January 15
+ * 
+ * Last Modified By: Armando Vega
+ * Date Last Modified: 2026 March 13
+ * 
+ * Description : Holds the camera recording screen to allow users to take videos for particular
+ * datasets. The chosen video is then stored in the app's async storage and the phone's Documents
+ * directory. The user can then view their recorded videos in the video library associated with that
+ * dataset. The screen also displays the currently selected dataset profile and the server connection status.
+ */
 import * as ImagePicker from 'expo-image-picker';
-import React, { useEffect, useState } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { getSelectedDatasetProfile, addProfileVideo } from '@/hooks/useVideoStorage';
-import { useFocusEffect } from '@react-navigation/native';
-import { useRouter } from "expo-router";
-import { useServer } from '@/contexts/ServerContext'; // Context hook for sharing server IP
-import { useLayoutEffect } from 'react';
-import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { useServer } from '@/contexts/ServerContext';
+import { addProfileVideo, getSelectedDatasetProfile } from '@/hooks/useVideoStorage';
 
 export default function CameraScreen() {
     const router = useRouter();
@@ -20,6 +31,7 @@ export default function CameraScreen() {
     const [profile, setProfile] = useState<string | null>(null);
     const navigation = useNavigation();
     
+    // Set up header button to navigate to QR Scanner
     useLayoutEffect(() => {
         navigation.getParent()?.setOptions({
           headerRight: () => (
@@ -42,22 +54,29 @@ export default function CameraScreen() {
 
     // Fetch selected profile on mount and when screen is focused
     useFocusEffect(
-        React.useCallback(() => {
+        useCallback(() => {
             let isActive = true;
             (async () => {
                 const selected = await getSelectedDatasetProfile();
                 if (isActive) setProfile(selected);
             })();
-            return () => { isActive = false; };
+            return () => {
+                isActive = false;
+            };
         }, [])
     );
 
+    // Request camera permissions on mount
     useEffect(() => {
         (async () => {
             await ImagePicker.requestCameraPermissionsAsync();
         })();
     }, []);
 
+    /**
+     * Function to handle taking a photo
+     * @deprecated
+     */
     const takePhoto = async () => {
         const result = await ImagePicker.launchCameraAsync({
             mediaTypes: ['images'],
@@ -73,6 +92,13 @@ export default function CameraScreen() {
         }
     };
 
+    /**
+     * @description Function to handle recording a video. The recorded video is saved to 
+     * the app's async storage and the phone's Documents directory. The video is also 
+     * associated with the currently selected dataset profile.
+     * @params none
+     * @returns {Promise<void>}
+     */
     const takeVideo = async () => {
         const result = await ImagePicker.launchCameraAsync({
             mediaTypes: ['videos'],

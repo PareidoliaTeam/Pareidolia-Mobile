@@ -1,15 +1,16 @@
 /*
  * Author: Armando Vega
  * Date Created: 2 March 2026
+ * 
  * Last Modified By: Armando Vega
- * Date Last Modified: 2 March 2026
+ * Date Last Modified: 13 March 2026
  * 
  * Description: This file defines a custom hook `useDatasetTabContent` 
  * that is the tab that shows the dataset profiles of a user. It allows
  * for setting the current dataset profile and the videos associated 
  * with each profile.
  */
-import { clearTmpFiles, logAllAppStorage, logStorageUsage, setSelectedModelProfile, clearTempDocuments, removeModelProfile } from '@/hooks/useVideoStorage';
+import { clearTmpFiles, logAllAppStorage, logStorageUsage, setSelectedModelProfile, clearTempDocuments, removeModelProfile, setMountedModelInfo } from '@/hooks/useVideoStorage';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, Touchable, TouchableOpacity, View } from 'react-native';
@@ -29,7 +30,7 @@ function useModelTabContent({
   handleRemoveProfile
 }: Props) {
   const [modalVisible, setModalVisible] = useState(false);
-
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
   return (
     <>
       <InputModal
@@ -72,7 +73,8 @@ function useModelTabContent({
             </View>
           ))}
           
-          <TouchableOpacity 
+          {/* KEEP THIS COMMENTED OUT BLOCK FOR CLOUD SERVICE IMPLEMENTATION */}
+          {/* <TouchableOpacity 
             style={[styles.cardContainer, styles.addCard]}
             onPress={() => {
               setModalVisible(true)
@@ -81,7 +83,9 @@ function useModelTabContent({
           >
             <Text style={styles.addIcon}>+</Text>
             <Text style={styles.smallButtonText}>Add Profile</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
+          {/* KEEP THIS COMMENTED OUT BLOCK FOR CLOUD SERVICE IMPLEMENTATION */}
+
         </View>
       </ScrollView>
     </>
