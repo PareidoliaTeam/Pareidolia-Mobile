@@ -18,9 +18,12 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useServer } from '@/contexts/ServerContext'; // Access server IP from QR scanner
-import { useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { useLayoutEffect, useState } from 'react';
+import { ActivityIndicator, Modal, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { downloadModelFile } from "../../hooks/useVideoStorage";
+import { useNavigation } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 type FileDict = {
     [datasetName: string]: {
@@ -75,6 +78,34 @@ export default function ReceiveScreen() {
   // Timestamp of last successful fetch
   const [lastFetch, setLastFetch] = useState<string | null>(null);
 
+  const [downloading, setDownloading] = useState<string | null>(null); // State for model download
+
+  const [downloadedModelMessage, setDownloadedModelMessage] = useState<string | null>(null); // State for downloaded model path
+  
+  const navigation = useNavigation();
+
+  const router = useRouter();
+
+  useLayoutEffect(() => {
+        navigation.getParent()?.setOptions({
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => router.push('/qrScanner')}
+              style={{
+                marginRight: 12,
+                width: 56,
+                height: 56,
+                justifyContent: 'center',
+                alignItems: 'center',
+                display: 'flex',
+              }}
+            >
+                <Ionicons name="qr-code-outline" size={24} style={{ transform: [{ translateX: 7 }, { translateY: -10 }] }} color="#8FD49D" />
+            </TouchableOpacity>
+          ),
+        });
+      }, [navigation]);
+  
   /**
    * Fetch file list from server using HTTP GET request
    * 
@@ -117,23 +148,14 @@ export default function ReceiveScreen() {
       // Parse JSON response from server
       const data: FetchModelFilesListRes = await response.json();
       
-      // Transform array into nested dictionary
-      // const dict: FileDict = {};
-      // for (const file of data.files) {
-      //   const dataset = file.datasetName ?? 'Unknown';
-      //   if (!dict[dataset]) dict[dataset] = {};
-      //   const { name, datasetName, ...fields } = file;
-      //   dict[dataset][name] = fields;
-      // }
       const dict: FetchModelFilesListRes = data; // Assuming server already sends in desired format
 
       setFiles(dict);
       setLastFetch(new Date().toLocaleTimeString());
 
-      // setDesktopVideoList(dict); // Example of using file list to set desktop video list
       console.log('Fetch complete. Files received:', dict);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch files');
+      setError(err instanceof Error ? err.message + "\nCheck desktop/server connection" : 'Failed to fetch files');
     } finally {
       setLoading(false);
     }
@@ -151,27 +173,18 @@ export default function ReceiveScreen() {
     console.log(`Attempting to download model: ${modelName} from server: ${serverIP}`);
 
     try {
-
-      // const baseURL = serverIP.replace(/\/$/, '');
-      // const fetchURL = baseURL.startsWith('http') 
-      //   ? `${baseURL}/get-models`
-      //   : `http://${baseURL}:3001/get-models`;
-      
-      // // Make GET request to server (no body needed for GET)
-      // const response = await fetch(fetchURL);
-      
-      // // Check HTTP status code (200-299 = success)
-      // if (!response.ok) {
-      //   throw new Error(`HTTP error! status: ${response.status}`);
-      // }
-      downloadModelFile(modelName, serverIP);
+      setDownloading(modelName);
+      await downloadModelFile(modelName, serverIP);
+      setDownloadedModelMessage(`Model ${modelName} downloaded successfully.`);
+      console.log(`Model ${modelName} downloaded successfully.`);
 
 
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch model');
+      setError(err instanceof Error ? err.message + "\nCheck desktop/server connection" : 'Failed to fetch model');
     } finally {
       setLoading(false);
+      setDownloading(null);
     }
   };
 
@@ -184,6 +197,27 @@ export default function ReceiveScreen() {
 
   return (
     <ThemedView style={styles.container}>
+
+      <Modal
+        visible={downloadedModelMessage !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setDownloadedModelMessage(null);
+          
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <ThemedView style={styles.modalBox}>
+            <ThemedText style={styles.modalTitle}>Download Complete</ThemedText>
+            <ThemedText style={styles.modalBody}>{downloadedModelMessage}</ThemedText>
+            <TouchableOpacity style={styles.modalButton} onPress={() => setDownloadedModelMessage(null)}>
+              <ThemedText style={styles.buttonText}>OK</ThemedText>
+            </TouchableOpacity>
+          </ThemedView>
+        </View>
+      </Modal>
+
       <ThemedText type="title" style={styles.title}>Receive Files</ThemedText>
       
       <ThemedView style={styles.statusContainer}>
@@ -233,8 +267,9 @@ export default function ReceiveScreen() {
               <TouchableOpacity
                 style={styles.button}
                 onPress={() => fetchModel(modelName)}
+                disabled={downloading !== null}
               >
-                <ThemedText style={styles.buttonText}>Download</ThemedText>
+                <ThemedText style={styles.buttonText}>{downloading === modelName ? 'Downloading...' : 'Download'}</ThemedText>
               </TouchableOpacity>
             </ThemedView>
           ))
@@ -250,7 +285,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   title: {
-    marginTop: 60,
+    marginTop: 20,
     marginBottom: 20,
   },
   statusContainer: {
@@ -324,4 +359,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.5,
   },
+    modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBox: {
+    width: '80%',
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    gap: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  modalBody: {
+    fontSize: 14,
+    textAlign: 'center',
+    opacity: 0.8,
+  },
+  modalButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 10,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+    marginTop: 8,
+  }
 });

@@ -1,11 +1,10 @@
 import { ServerProvider } from "@/contexts/ServerContext";
-import { Stack } from "expo-router";
-// import { clearImagPickerCache } from "../hooks/useVideoStorage";
+import { Stack, useRouter } from "expo-router";
+import { TouchableOpacity } from "react-native";
+import { Ionicons } from '@expo/vector-icons';
 
 export default function RootLayout() {
-  // useEffect(() => {
-  //   clearImagPickerCache();
-  // }, []);
+  const userRouter = useRouter();
 
   return (
     <ServerProvider>
@@ -21,7 +20,7 @@ export default function RootLayout() {
       <Stack.Screen
         name="index"
         options={{
-          headerShown: false,
+          headerShown: true,
         }}
       />
     </Stack>
