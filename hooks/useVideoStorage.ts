@@ -1,3 +1,16 @@
+/**
+ * Author: Armando Vega
+ * Date Created: 15 January 2026
+ * 
+ * Last Modified By: Armando Vega
+ * Date Last Modified: 13 March 2026
+ * 
+ * Description: Holds all AsyncStorage interactions and file system management for the app, including:
+ * - Managing dataset and model profiles (create, delete, select)
+ * - Storing and retrieving videos associated with dataset profiles
+ * - Downloading model files from the server and storing them locally
+ * - Cleaning up temporary files created during video recording and model downloading
+ */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deleteAsync, downloadAsync, getInfoAsync } from 'expo-file-system/legacy';
 import { Directory, File, Paths } from 'expo-file-system/next';
@@ -7,13 +20,14 @@ import { Directory, File, Paths } from 'expo-file-system/next';
 const PROFILE_KEY = 'selectedProfile';
 const MODEL_PROFILES_LIST_KEY = 'modelProfilesList'; // key to track the list of model profiles
 const MODEL_FILES_LIST_KEY = 'modelFilesList';       // key to track the files and path
-const DATASET_PROFILES_LIST_KEY = 'datasetProfilesList';
-const VIDEOS_KEY = 'profileVideos';
+const DATASET_PROFILES_LIST_KEY = 'datasetProfilesList'; // tracks list of dataset profiles to be loaded into profile tab
+const VIDEOS_KEY = 'profileVideos';                      // key to track videos associated with each dataset profile, stored as { [profileName]: [videoUri1, videoUri2, ...] }
 const PROFILES_LIST_KEY = 'profilesList';
-const IP_KEY = 'serverIP';
-const DESKTOP_VIDEOS_SENT_KEY = 'desktopVideosSent';
-const DATASET_PROFILE_KEY = 'selectedDatasetProfile';
-const MODEL_PROFILE_KEY = 'selectedModelProfile';
+const IP_KEY = 'serverIP';                               // key to store the server IP address 
+const DESKTOP_VIDEOS_SENT_KEY = 'desktopVideosSent';     // list of videos sent to the desktop client/server
+const DATASET_PROFILE_KEY = 'selectedDatasetProfile';    // key to store the currently selected dataset profile name
+const MODEL_PROFILE_KEY = 'selectedModelProfile';        // key to store the currently selected model profile name
+const MOUNTED_MODEL_KEY = 'mountedModel';                // 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,6 +45,20 @@ type FileDict = {
 type FetchModelFilesListRes = {
   [modelName: string]: {
     path: string;
+    labels: {
+      [labelName: string]: {
+        [datasetName: string]: { path: string };
+      };
+    };
+  };
+};
+
+type ModelDetails = {
+  path: string;
+  labels: {
+    [labelName: string]: {
+      [datasetName: string]: { path: string };
+    };
   };
 };
 
@@ -39,6 +67,13 @@ type FetchLabelsFilesRes = {
     path: string;
   };
 };
+
+type MountedModelInfo = {
+  [modelName: string]: {
+    path: string;
+    labels: string[];
+  };
+}
 
 // ─── File System Initialization ───────────────────────────────────────────────
 
@@ -126,7 +161,7 @@ export const removeDatasetProfile = async (name: string) => {
 
 export const getModelProfiles = async (): Promise<string[]> => {
   const json = await AsyncStorage.getItem(MODEL_PROFILES_LIST_KEY);
-  return json ? JSON.parse(json) : ['Model A', 'Model B', 'Model C'];
+  return json ? JSON.parse(json) : [];
 };
 
 export const addModelProfile = async (name: string) => {
@@ -138,9 +173,29 @@ export const addModelProfile = async (name: string) => {
 };
 
 export const removeModelProfile = async (name: string) => {
-  const profiles = await getModelProfiles();
-  const filtered = profiles.filter(p => p !== name);
-  await AsyncStorage.setItem(MODEL_PROFILES_LIST_KEY, JSON.stringify(filtered));
+  // Delete the physical .tflite file
+  const profiles = await getModelProfilesList();
+  const entry = profiles[name] || profiles[`${name}.tflite`];
+  if (entry?.path) {
+    try {
+      const file = new File(entry.path);
+      if (file.exists) {
+        file.delete();
+        console.log(`Deleted model file successfully: ${entry.path}`);
+      }
+    } catch (e) {
+      console.warn('Failed to delete model file:', e);
+    }
+  }
+
+  // Remove from both AsyncStorage keys
+  const nameList = await getModelProfiles();
+  await AsyncStorage.setItem(MODEL_PROFILES_LIST_KEY, JSON.stringify(nameList.filter(p => p !== name)));
+
+  const fileList = await getModelProfilesList();
+  delete fileList[name];
+  delete fileList[`${name}.tflite`];
+  await AsyncStorage.setItem(MODEL_FILES_LIST_KEY, JSON.stringify(fileList));
 };
 
 export const setModelProfilesList = async (profiles: FetchModelFilesListRes) => {
@@ -150,6 +205,19 @@ export const setModelProfilesList = async (profiles: FetchModelFilesListRes) => 
 export const getModelProfilesList = async (): Promise<FetchModelFilesListRes> => {
   const json = await AsyncStorage.getItem(MODEL_FILES_LIST_KEY);
   return json ? JSON.parse(json) : {};
+};
+
+// ─── Model Mounting ───────────────────────────────────────────────────────────
+export const getMountedModelInfo = async (): Promise<MountedModelInfo> => {
+  const json = await AsyncStorage.getItem(MOUNTED_MODEL_KEY);
+  return json ? JSON.parse(json) : {};
+};
+
+export const setMountedModelInfo = async (modelName: string, path: string, labels: string[]) => {
+  const newInfo = {
+    [modelName]: { path, labels },
+  };
+  await AsyncStorage.setItem(MOUNTED_MODEL_KEY, JSON.stringify(newInfo));
 };
 
 // ─── Videos ───────────────────────────────────────────────────────────────────
@@ -240,15 +308,16 @@ export const downloadModelFile = async (modelName: string, serverIP: string) => 
   console.log("serverIP: ", serverIP);
   console.log("downloadURL: ", downloadURL);
   try {
-    const dest = new File(new Directory(Paths.document, 'models'), modelName);
+    const safeName = modelName.endsWith('.tflite') ? modelName : `${modelName}.tflite`;
+    const dest = new File(new Directory(Paths.document, 'models'), safeName);
     console.log("dest uri: ", dest.uri);
 
-    const fileExists = await getInfoAsync(dest.uri + ".tflite");
+    const fileExists = await getInfoAsync(dest.uri);
     if (fileExists.exists) {
-      await deleteAsync(dest.uri + ".tflite");
+      await deleteAsync(dest.uri);
     }
 
-    const { uri, status } = await downloadAsync(downloadURL, dest.uri + ".tflite");
+    const { uri, status } = await downloadAsync(downloadURL, dest.uri);
 
     if (status !== 200) {
       throw new Error(`Server returned status ${status}`);
@@ -268,14 +337,53 @@ export const downloadModelFile = async (modelName: string, serverIP: string) => 
     console.log('File extension:', ext);
     console.log('File size:', fileInfo.size, 'bytes');
     const existingModels = await getModelProfilesList();
-    setModelProfilesList({ ...existingModels, [modelName]: { path: uri } });
+    const modelLabels = await retrieveModelDetails(modelName, serverIP);
+
+    // TODO: get labels from server and save them here too, then pass to model loading screen to load them into TF Lite interpreter
+    setModelProfilesList({ ...existingModels, [modelName]: { path: uri, labels: modelLabels?.labels || {} } });
+
+    const aList = await getModelProfilesList();
+    console.log("Updated model profiles list: ", JSON.stringify(aList, null, 2));
+
     addModelProfile(modelName.replace('.tflite', '')); // Add profile without extension
-    
+    // setMountedModelInfo(modelName.replace('.tflite', ''), uri, modelLabels ? Object.keys(modelLabels.labels) : []); // Set mounted model to the newly downloaded model
+
     return uri;
 
   } catch (error) {
     console.error('Error downloading model:', error);
     throw error; // re-throw so the caller can handle it
+  }
+};
+
+export const retrieveModelDetails = async (modelName: string, serverIP: string): Promise<ModelDetails | null> => {
+  if(!serverIP) {
+    console.error('Server IP is not set');
+    return null;
+  }
+
+  try {
+    const baseURL = serverIP.replace(/\/$/, '');
+    const fetchURL = baseURL.startsWith('http')
+      ? `${baseURL}/get-model-details?modelName=${modelName}`
+      : `http://${baseURL}:3001/get-model-details?modelName=${modelName}`;
+    console.log("modelName: ", modelName);
+    console.log("serverIP: ", serverIP);
+    console.log("fetchURL: ", fetchURL);
+
+    const response = await fetch(fetchURL);
+    if (!response.ok) {
+      console.error('Failed to fetch model details:', response.status, response.statusText);
+      return null;
+    }
+
+    const data: ModelDetails = await response.json();
+    console.log('Received model details:', data);
+
+    return data;
+  } catch (error) {
+    console.error('Error fetching model details:', error);
+    return null;
   }
 };
 

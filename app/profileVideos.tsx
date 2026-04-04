@@ -1,8 +1,20 @@
+/*
+ * Author: Armando Vega
+ * Date Created: 2026 January 15
+ * 
+ * Last Modified By: Armando Vega
+ * Date Last Modified: 2026 March 13
+ * 
+ * Description : Displays all videos associated with the selected dataset profile. Users can add videos from their photo library, 
+ * which are then stored in the app's async storage and the phone's Documents directory. Users can also remove videos from the profile. 
+ * The screen allows users to select multiple videos to upload to the server, with checks against a sent list to prevent duplicate uploads.
+ *  The screen also includes a connection test to ensure the server is reachable before attempting uploads.
+ */
+
 import { useServer } from '@/contexts/ServerContext'; // Context hook for sharing server IP
-import { useNavigation } from '@react-navigation/native';
 import { getInfoAsync, readAsStringAsync } from 'expo-file-system/legacy'; // Read files as base64
 import * as ImagePicker from "expo-image-picker";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useNavigation } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useLayoutEffect, useState } from "react";
 import { Alert, Button, ScrollView, Text, TouchableOpacity, View } from "react-native";
@@ -14,26 +26,10 @@ interface FileItem {
   size: number;
   uploadedAt: string;
   type: string;
-  datasetName?: string; // Optional dataset name for categorization
+  datasetName?: string;
 }
 
-interface FilesResponse {
-  files: FileItem[];
-  count: number;
-  timestamp: string;
-  mock?: boolean;
-}
-
-type FileDict = {
-    [datasetName: string]: {
-        [fileName: string]: {
-            size: number;
-            type: string;
-            uploadedAt: string;
-        }
-    }
-}
-
+// video player component with toggleable native controls and selection outline (can be turned into hook later)
 function VideoPlayer({ uri, toggle, selected, onPress }: { uri: string; toggle: boolean; selected: boolean; onPress: () => void }) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
@@ -83,6 +79,7 @@ export default function ProfileVideos() {
   const [sentVideos, setSentVideos] = useState<{ [fileName: string]: boolean }>({});
   const navigation = useNavigation();
 
+  // multi-select toggle in header
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
@@ -111,6 +108,7 @@ export default function ProfileVideos() {
     });
   }, [navigation, toggle]);
 
+  // Load videos for the selected profile on mount and when profile changes
   useEffect(() => {
     (async () => {
       setVideos(await getProfileVideos(profile));
@@ -123,9 +121,6 @@ export default function ProfileVideos() {
       }, {} as { [fileName: string]: boolean }));
     })();
   }, [profile]);
-
-
-  const [files, setFiles] = useState<FileDict>({});
   
   // Loading state while fetch request is in progress
   const [loading, setLoading] = useState(false);
@@ -157,6 +152,10 @@ export default function ProfileVideos() {
     })();
   }, [profile]);
 
+  /**
+   * @description Handles picking a video from the user's photo library and adding it to the current profile. 
+   * The video URI is stored in async storage and the app's Documents directory, and the list of videos is refreshed after adding.
+   */
   const pickVideo = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["videos"],
@@ -179,7 +178,11 @@ export default function ProfileVideos() {
     });
   };
 
-  const handleAlternateAction = (uri: string) => {
+  /**
+   * @description Handles selecting/deselecting videos for upload. When a video is tapped in toggle mode, it is added to or removed from the selectedVideos set.
+   * @param uri 
+   */
+  const handleVideoSelection = (uri: string) => {
     setSelectedVideos((prev) => {
       if (prev.has(uri)) {
         const newSet = new Set(prev);
@@ -198,6 +201,11 @@ export default function ProfileVideos() {
     setSelectedVideos(new Set());
   };
 
+  /**
+   * @description handles the upload process first calling pingServer to check connection, then checks against the sent list
+   * to prevent duplicate uploads, and finally calls performUpload to do the actual uploading of videos to the server with POST requests.
+   * @returns 
+   */
   const handleUpload = async () => {
     if (selectedVideos.size === 0) {
       alert('No videos selected for upload.');
@@ -221,6 +229,12 @@ export default function ProfileVideos() {
     checkAgainstSentList();
   };
 
+  /**
+   * @description Checks the selected videos against the list of videos already sent to the server for this profile. 
+   * If any selected videos have already been sent, an alert is shown listing those videos and asking the user to confirm 
+   * if they want to proceed with uploading the new videos that haven't been sent before. If all selected videos are new, 
+   * it proceeds directly to upload.
+   */
   const checkAgainstSentList = async () => {
     const sent = await getDesktopVideosSent();
     const alreadySent = [];
@@ -256,6 +270,10 @@ export default function ProfileVideos() {
     }
   };
 
+  /**
+   * @description takes selected videos, converts them to base64, and uploads them to the server one by one with POST requests. 
+   * The server endpoint is determined by the serverIP from context.
+   */
   const performUpload = async () => {
     console.log('📤 Starting upload process');
     console.log('Server IP from context:', serverIP);
@@ -342,6 +360,10 @@ export default function ProfileVideos() {
     }
   };
 
+  /**
+   * @description pings the server to see if there is a connection before upload attempts
+   * @returns boolean indicating if the server is reachable.
+   */
   const pingServer = async () => {
     if (!serverIP) {
       console.log('yeet');
@@ -450,7 +472,7 @@ export default function ProfileVideos() {
                     borderColor: isSent ? '#ff855c' : '#444', // Green if sent, gray otherwise
                   }}
                 >
-                  <VideoPlayer uri={uri} toggle={toggle} selected={selectedVideos.has(uri)} onPress={() => handleAlternateAction(uri)} />
+                  <VideoPlayer uri={uri} toggle={toggle} selected={selectedVideos.has(uri)} onPress={() => handleVideoSelection(uri)} />
                   <TouchableOpacity onPress={() => handleRemove(uri)} style={{ marginTop: 8 }}>
                     <Text style={{ color: '#ff4444', textAlign: 'center' }}>Remove</Text>
                   </TouchableOpacity>

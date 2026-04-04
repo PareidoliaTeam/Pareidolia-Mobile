@@ -1,18 +1,13 @@
-/**
- * Receive Files Screen
+/*
+ * Author: Armando Vega
+ * Date Created: 2026 January 15
  * 
- * This component fetches a list of files from the server using a GET request.
- * The server IP comes from the QR scanner (shared via Context).
+ * Last Modified By: Armando Vega
+ * Date Last Modified: 2026 March 13
  * 
- * Flow:
- * 1. User taps "Fetch Files" button
- * 2. Makes GET request to http://{serverIP}/files
- * 3. Server responds with JSON array of file metadata
- * 4. Display list of files with name, size, type, upload time
- * 
- * HTTP GET Request Example:
- * Request:  GET http://192.168.1.100:3001/files
- * Response: { "files": [{"name": "photo.jpg", "size": 1234, ...}], "count": 1 }
+ * Description : Fetches the list of models from the server/desktop client that the user can download to their phone.
+ * The model downloaded will be added to the model profiles and the user can then choose that model profile to use for
+ * real-time inferencing. The screen also displays the currently connected server IP address and the status of the fetch request.
  */
 
 import { ThemedText } from '@/components/themed-text';
@@ -43,24 +38,29 @@ interface FileItem {
   datasetName?: string; // Optional dataset name for categorization
 }
 
-type FilesResponse = {
-  files: FileItem[];
-  count: number;
-  timestamp: string;
-  mock?: boolean;
-}
+// type FilesResponse = {
+//   files: FileItem[];
+//   count: number;
+//   timestamp: string;
+//   mock?: boolean;
+// }
 
-type FetchLabelsFilesRes = {
-  [labelName: string]: {
-    path: string;
-  };
-}
+// type FetchLabelsFilesRes = {
+//   [labelName: string]: {
+//     path: string;
+//   };
+// }
 
 type FetchModelFilesListRes = {
   [modelName: string]: {
     path: string;
+    labels: {
+      [labelName: string]: {
+        [datasetName: string]: { path: string };
+      };
+    };
   };
-}
+};
 
 export default function ReceiveScreen() {
   // Get server IP from Context (set by QR scanner on Connect tab)
@@ -107,19 +107,36 @@ export default function ReceiveScreen() {
       }, [navigation]);
   
   /**
-   * Fetch file list from server using HTTP GET request
+   * Fetch model list from server using HTTP GET request
    * 
-   * Constructs URL from scanned server IP and makes GET request to /files endpoint.
-   * Server responds with JSON containing array of file objects.
+   * Constructs URL from scanned server IP and makes GET request to /get-models endpoint.
+   * Server responds with JSON containing array of model objects.
    * 
    * Example:
-   * GET http://192.168.1.100:3001/files
-   * Response: {
-   *   "files": [
-   *     {"name": "photo.jpg", "size": 2048576, "type": "image/jpeg", "uploadedAt": "2026-02-20T10:30:00Z"}
-   *   ],
-   *   "count": 1
-   * }
+   * GET http://192.168.1.100:3001/get-models
+   * Response: 
+   * {
+   *   "Flowers": {
+        "path": "/Users/ezedi/Documents/PareidoliaApp/models/Flowers",
+        "labels": {
+          "Daisy": {
+            "daisy": "/Users/ezedi/Documents/PareidoliaApp/datasets/daisy"
+          },
+          "Rose": {
+            "roses": "/Users/ezedi/Documents/PareidoliaApp/datasets/roses"
+          },
+          "Sunflower": {
+            "sunflowers": "/Users/ezedi/Documents/PareidoliaApp/datasets/sunflowers"
+          },
+          "Dandelion": {
+            "dandelion": "/Users/ezedi/Documents/PareidoliaApp/datasets/dandelion"
+          },
+          "Tulip": {
+            "tulips": "/Users/ezedi/Documents/PareidoliaApp/datasets/tulips"
+          }
+        }
+      }
+    }
    */
   const fetchModelsList = async () => {
     if (!serverIP) {
@@ -161,6 +178,11 @@ export default function ReceiveScreen() {
     }
   };
 
+  /**
+   * @description handles the actual downloading of the model files when user choooses to download the file.
+   * @param modelName 
+   * @returns 
+   */
   const fetchModel = async (modelName: string) => {
     if (!serverIP) {
       setError('No server IP address. Please scan QR code on Connect tab.');
@@ -188,12 +210,12 @@ export default function ReceiveScreen() {
     }
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' B';
-    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-    else if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
-    else return (bytes / 1073741824).toFixed(1) + ' GB';
-  };
+  // const formatFileSize = (bytes: number) => {
+  //   if (bytes < 1024) return bytes + ' B';
+  //   else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  //   else if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+  //   else return (bytes / 1073741824).toFixed(1) + ' GB';
+  // };
 
   return (
     <ThemedView style={styles.container}>
