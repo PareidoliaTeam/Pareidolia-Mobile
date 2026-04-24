@@ -10,7 +10,7 @@ export default function RootLayout() {
     <ServerProvider>
     <Stack
       screenOptions={{
-        headerShown: true,
+        headerShown: false,
         headerStyle: { backgroundColor: '#000' },
         headerTintColor: '#fff',
         headerTitleStyle: { color: '#fff' },
@@ -20,7 +20,7 @@ export default function RootLayout() {
       <Stack.Screen
         name="index"
         options={{
-          headerShown: true,
+          headerShown: false,
         }}
       />
     </Stack>

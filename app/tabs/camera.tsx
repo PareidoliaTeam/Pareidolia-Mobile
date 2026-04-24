@@ -10,12 +10,12 @@
  * directory. The user can then view their recorded videos in the video library associated with that
  * dataset. The screen also displays the currently selected dataset profile and the server connection status.
  */
-import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useServer } from '@/contexts/ServerContext';
@@ -78,6 +78,7 @@ export default function CameraScreen() {
      * @deprecated
      */
     const takePhoto = async () => {
+        if (!profile) return; // Don't proceed if no profile selected
         const result = await ImagePicker.launchCameraAsync({
             mediaTypes: ['images'],
             allowsEditing: true,
@@ -100,6 +101,7 @@ export default function CameraScreen() {
      * @returns {Promise<void>}
      */
     const takeVideo = async () => {
+        if (!profile) return; // Don't proceed if no profile selected
         const result = await ImagePicker.launchCameraAsync({
             mediaTypes: ['videos'],
             allowsEditing: true,
@@ -126,11 +128,11 @@ export default function CameraScreen() {
             <Text style={styles.modelStatus}>Server IP: {serverIP ?? 'Not Connected'}</Text>
 
             <View style={styles.buttonContainer}>
-                <TouchableOpacity style={styles.button} onPress={takePhoto}>
+                <TouchableOpacity style={[styles.button, !profile && styles.buttonDisabled]} onPress={takePhoto} disabled={!profile}>
                     <Text style={styles.buttonText}> Take Photo</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.button} onPress={takeVideo}>
+                <TouchableOpacity style={[styles.button, !profile && styles.buttonDisabled]} onPress={takeVideo} disabled={!profile}>
                     <Text style={styles.buttonText}> Record Video</Text>
                 </TouchableOpacity>
             </View>
@@ -190,11 +192,16 @@ const styles = StyleSheet.create({
         paddingHorizontal: 32,
         borderRadius: 12,
         alignItems: 'center',
-        shadowColor: '#8FD49D',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.5,
-        shadowRadius: 8,
-        elevation: 4,
+        // shadowColor: '#8FD49D',
+        // shadowOffset: { width: 0, height: 4 },
+        // shadowOpacity: 0.5,
+        // shadowRadius: 8,
+        // elevation: 4,
+    },
+    buttonDisabled: {
+        backgroundColor: '#555',
+        // shadowColor: '#000',
+        // shadowOpacity: 0.2,
     },
     buttonText: {
         color: '#fff',

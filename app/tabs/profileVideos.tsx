@@ -12,14 +12,15 @@
  */
 
 import { useServer } from '@/contexts/ServerContext'; // Context hook for sharing server IP
+import { Ionicons } from '@expo/vector-icons';
 import { getInfoAsync, readAsStringAsync } from 'expo-file-system/legacy'; // Read files as base64
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useLayoutEffect, useState } from "react";
-import { Alert, Button, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { addProfileVideo, getDesktopVideosSent, getProfileVideos, removeProfileVideo, setDesktopVideosSent } from "../hooks/useVideoStorage";
+import { addProfileVideo, getDesktopVideosSent, getProfileVideos, removeProfileVideo, setDesktopVideosSent } from "../../hooks/useVideoStorage";
 
 interface FileItem {
   name: string;
@@ -82,6 +83,27 @@ export default function ProfileVideos() {
   // multi-select toggle in header
   useLayoutEffect(() => {
     navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={{
+            marginLeft: 12,
+            width: 56,
+            height: 56,
+            justifyContent: 'center',
+            alignItems: 'center',
+            display: 'flex',
+          }}
+        >
+          <Text style={{
+            color: '#8FD49D',
+            fontWeight: 'bold',
+            fontSize: 16,
+            textAlign: 'center',
+            transform: [{ translateX: -5 }, { translateY: -10 }],
+          }}>‹ Back</Text>
+        </TouchableOpacity>
+      ),
       headerRight: () => (
         <TouchableOpacity
           onPress={handleToggle}
@@ -237,36 +259,26 @@ export default function ProfileVideos() {
    */
   const checkAgainstSentList = async () => {
     const sent = await getDesktopVideosSent();
-    const alreadySent = [];
-    const notSent = [];
-
-    // Build updated sent object incrementally
-    const updatedSent = { ...sent, [profile]: { ...sent[profile] } };
+    const alreadySent: string[] = [];
 
     for (const uri of selectedVideos) {
-        const fileName = uri.split('/').pop() || 'unknown';
-        if (sent[profile] && sent[profile][fileName]) {
-            alreadySent.push(fileName);
-            selectedVideos.delete(uri);
-        } else {
-            notSent.push(fileName);
-        }
+      const fileName = uri.split('/').pop() || 'unknown';
+      if (sent[profile] && sent[profile][fileName]) {
+        alreadySent.push(fileName);
+      }
     }
 
     if (alreadySent.length > 0) {
       Alert.alert(
-        'Upload Warning',
-        `The following videos have already been uploaded before:\n\n${alreadySent.join('\n')}\n\n`,
+        'Already Uploaded',
+        `The following videos were previously uploaded:\n\n${alreadySent.join('\n')}\n\nDo you still want to upload all selected videos?`,
         [
-          { text: 'Cancel', style: 'cancel' }
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Upload Anyway', onPress: () => performUpload() },
         ]
       );
-      performUpload(); // Proceed with uploading any new videos that weren't in the sent list
     } else {
-      const updated = await getDesktopVideosSent();
       performUpload();
-      console.log('All selected videos are new. Proceeding with upload.');
-      console.log(updated); // Debug log to verify sent list updates
     }
   };
 
@@ -433,20 +445,111 @@ export default function ProfileVideos() {
     Alert.alert('Sent Videos', JSON.stringify(sent, null, 2));
   }
 
+  const handleSelectAll = () => {
+    setSelectedVideos(new Set(videos));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedVideos(new Set());
+  };
+
+  const handleSelectNew = () => {
+    const newVideos = videos.filter(uri => {
+      const fileName = uri.split('/').pop() || '';
+      return !sentVideos[fileName];
+    });
+    setSelectedVideos(new Set(newVideos));
+  };
+
+  const handleRemoveWithConfirm = (uri: string) => {
+    const fileName = uri.split('/').pop() || 'this video';
+    Alert.alert(
+      'Remove Video',
+      `Are you sure you want to remove "${fileName}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => handleRemove(uri) },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
 
-      <Text style={{ color: "#fff", fontSize: 24, textAlign: "center", margin: 10 }}>
-        {profile} Videos
+      {/* Back button */}
+      <TouchableOpacity
+        onPress={() => navigation.goBack()}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 12, paddingTop: 8 }}
+      >
+        <Ionicons name="chevron-back" size={24} color="#8FD49D" />
+        <Text style={{ color: '#8FD49D', fontSize: 17 }}>Back</Text>
+      </TouchableOpacity>
+
+      {/* Centered title */}
+      <Text style={{ color: '#fff', fontSize: 24, fontWeight: '700', textAlign: 'center', paddingVertical: 10 }} numberOfLines={1}>
+        {profile}
       </Text>
-      <Button title="Print Sent Videos List" onPress={printSentVideos} />
-      <Button title="Add Video" onPress={pickVideo} />
 
-      {toggle && selectedVideos.size > 0 && (
-        <Button title="Upload Selected" onPress={handleUpload} />
-       )}
+      {/* Action buttons row - normal mode */}
+      {!toggle && (
+        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 12 }}>
+          <TouchableOpacity
+            onPress={handleToggle}
+            style={{ flex: 1, backgroundColor: '#2C2C2E', paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#444' }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>Select</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={pickVideo}
+            style={{ flex: 1, backgroundColor: '#8FD49D', paddingVertical: 12, borderRadius: 10, alignItems: 'center' }}
+          >
+            <Text style={{ color: '#000', fontWeight: '600', fontSize: 13 }}>Import From Gallery</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-      <Button title="Print Selected" onPress={() => console.log([...selectedVideos])} />
+      {/* Action buttons row - select mode */}
+      {toggle && (
+        <View style={{ paddingHorizontal: 16, marginBottom: 8, gap: 8 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              onPress={handleToggle}
+              style={{ flex: 1, backgroundColor: '#3a3a3a', paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#555' }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleUpload}
+              disabled={selectedVideos.size === 0}
+              style={{ flex: 1, backgroundColor: selectedVideos.size > 0 ? '#4A90E2' : '#1a1a3a', paddingVertical: 12, borderRadius: 10, alignItems: 'center' }}
+            >
+              <Text style={{ color: selectedVideos.size > 0 ? '#fff' : '#555', fontWeight: '600', fontSize: 13 }}>
+                {selectedVideos.size > 0 ? `Upload (${selectedVideos.size})` : 'Upload'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              onPress={handleSelectAll}
+              style={{ flex: 1, backgroundColor: '#2C2C2E', paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#444' }}
+            >
+              <Text style={{ color: '#8FD49D', fontWeight: '600', fontSize: 13 }}>Select All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleSelectNew}
+              style={{ flex: 1, backgroundColor: '#2C2C2E', paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#444' }}
+            >
+              <Text style={{ color: '#4A90E2', fontWeight: '600', fontSize: 13 }}>Select New</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleDeselectAll}
+              style={{ flex: 1, backgroundColor: '#2C2C2E', paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#444' }}
+            >
+              <Text style={{ color: '#aaa', fontWeight: '600', fontSize: 13 }}>Deselect All</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
         {videos.length === 0 ? (
@@ -466,15 +569,18 @@ export default function ProfileVideos() {
                     width: '48%',
                     marginBottom: 16,
                     backgroundColor: '#111',
-                    borderRadius: 8,
+                    borderRadius: 10,
                     overflow: 'hidden',
-                    borderWidth: 3,
-                    borderColor: isSent ? '#ff855c' : '#444', // Green if sent, gray otherwise
+                    borderWidth: 2,
+                    borderColor: isSent ? '#ff855c' : selectedVideos.has(uri) ? '#4A90E2' : '#333',
                   }}
                 >
                   <VideoPlayer uri={uri} toggle={toggle} selected={selectedVideos.has(uri)} onPress={() => handleVideoSelection(uri)} />
-                  <TouchableOpacity onPress={() => handleRemove(uri)} style={{ marginTop: 8 }}>
-                    <Text style={{ color: '#ff4444', textAlign: 'center' }}>Remove</Text>
+                  <TouchableOpacity
+                    onPress={() => handleRemoveWithConfirm(uri)}
+                    style={{ marginVertical: 8, marginHorizontal: 10, paddingVertical: 8, borderRadius: 8, backgroundColor: '#3a0000', alignItems: 'center' }}
+                  >
+                    <Text style={{ color: '#ff4444', fontWeight: '600', fontSize: 13 }}>Remove</Text>
                   </TouchableOpacity>
                 </View>
               );

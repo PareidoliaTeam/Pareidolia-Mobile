@@ -8,15 +8,17 @@
  *   Description: Tab that allows users to continuously classify what the camera sees in real time.
  */
 
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
 import { useTensorflowModel } from "@/hooks/useTensorFlowModel"; // hook to load the model
 import { getModelProfilesList, getSelectedModelProfile } from "@/hooks/useVideoStorage";
 import { Ionicons } from '@expo/vector-icons'; // For icons in the header
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
-import { use, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"; // useState for state management, useRef for camera reference
-import { Button, StyleSheet, Text, TouchableOpacity, View } from "react-native"; // RN components
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"; // useState for state management, useRef for camera reference
+import { Animated, Easing, StyleSheet, Text, TouchableOpacity, View } from "react-native"; // RN components
 import { Camera, useCameraDevices, useFrameProcessor } from 'react-native-vision-camera'; // For continuous camera feed
-import { useResizePlugin } from 'vision-camera-resize-plugin'; // For resizing frames
 import { useRunOnJS, useSharedValue } from 'react-native-worklets-core';
+import { useResizePlugin } from 'vision-camera-resize-plugin'; // For resizing frames
 
 export default function Index() {
   const devices = useCameraDevices();
@@ -36,6 +38,11 @@ export default function Index() {
   const [displayLabel, setDisplayLabel] = useState<string>(''); // State to hold the label to display on the screen
   const lastLabel = useSharedValue("");
 
+  // Animated opacity values for smooth camera transitions
+  // closeButtonOpacity starts at 1 since camera is closed by default
+  const [cameraOpacity] = useState(new Animated.Value(0));
+  const [closeButtonOpacity] = useState(new Animated.Value(1));
+
   // updating display label from the frame processor using useRunOnJS to run on the JS thread
   const updateDisplayLabel = useRunOnJS((label: string) => {
     setDisplayLabel((prev) => (prev === label ? prev : label));
@@ -48,6 +55,43 @@ export default function Index() {
       setDisplayLabel('');
     }, [])
   );
+
+  // Animate opacity when camera opens/closes
+  useEffect(() => {
+    if (isCameraOpen) {
+      // Fade in camera, fade out button
+      Animated.parallel([
+        Animated.timing(cameraOpacity, {
+          toValue: 1,
+          duration: 250,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(closeButtonOpacity, {
+          toValue: 0,
+          duration: 250,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      // Fade out camera, fade in button
+      Animated.parallel([
+        Animated.timing(cameraOpacity, {
+          toValue: 0,
+          duration: 250,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(closeButtonOpacity, {
+          toValue: 1,
+          duration: 250,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [isCameraOpen, cameraOpacity, closeButtonOpacity]);
 
   // Load the model profile and associated labels when the screen is focused
   useFocusEffect(
@@ -169,56 +213,129 @@ export default function Index() {
     setIsCameraOpen(true);
   }
 
-  if (!modelPath) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>No model loaded. Please download a model first.</Text></View>
-  if (loading) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Loading model...</Text></View>
-  if (error) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Error: {error.message}</Text></View>
+  if (!modelPath) return <ThemedView style={styles.container}><ThemedText>No model loaded. Please download a model first.</ThemedText></ThemedView>
+  if (loading) return <ThemedView style={styles.container}><ThemedText>Loading model...</ThemedText></ThemedView>
+  if (error) return <ThemedView style={styles.container}><ThemedText>Error: {error.message}</ThemedText></ThemedView>
 
   return (
-    <View
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        padding: 20,
-      }}
-    >
-      <Text style={{ fontSize: 18, marginBottom: 20 }}>{selectedModelProfileName || 'Unknown'} Classifier</Text>
-      <Text style={{ fontSize: 16, marginBottom: 20 }}>{displayLabel}</Text>
-      {!isCameraOpen && (
-        <>
-          <View style={{ height: 10 }} />
-          <Button title="Open Camera for Live Classification" onPress={handleOpenCamera} />
-        </>
-      )}
+    <ThemedView style={styles.container}>
+      <ThemedText type="title" style={styles.title}>{selectedModelProfileName || 'Unknown'} Classifier</ThemedText>
+      
+      <ThemedText style={styles.predictionLabel}>{displayLabel || 'Model Ready'}</ThemedText>
+      
+      <View style={styles.cameraContainer}>
+        <Animated.View style={[styles.cameraAnimatedView, { opacity: cameraOpacity }]} pointerEvents={isCameraOpen ? 'auto' : 'none'}>
+          {device && (
+            <Camera
+              ref={cameraRef}
+              style={styles.camera}
+              device={device}
+              isActive={isCameraOpen}
+              frameProcessor={frameProcessor}
+            />
+          )}
+        </Animated.View>
 
-      {isCameraOpen && device && (
-        
-        <View style={{ alignItems: 'center' }}>
-            <TouchableOpacity style={styles.closeButton} onPress={() => {setIsCameraOpen(false); setDisplayLabel('')}} >
-            <Text style={{color: "blue"}}>
-                Close Camera
-            </Text>
+        <Animated.View style={[styles.startButtonOverlay, { opacity: closeButtonOpacity }]} pointerEvents={isCameraOpen ? 'none' : 'auto'}>
+          <TouchableOpacity style={styles.startButton} onPress={handleOpenCamera}>
+            <Text style={styles.startButtonText}>Start Classification</Text>
           </TouchableOpacity>
-          <Camera
-            ref={cameraRef}
-            style={{ width: 480, height: 480, marginBottom: 20 }}
-            device={device}
-            isActive={isCameraOpen}
-            frameProcessor={frameProcessor}
-          />
-        </View>
-        
-      )}
-      {isCameraOpen && !device && (
-        <Text>No camera device found. Please check your device or permissions.</Text>
-      )}
-    </View>
+        </Animated.View>
+
+        <Animated.View style={[styles.stopButtonOverlay, { opacity: cameraOpacity }]} pointerEvents={isCameraOpen ? 'auto' : 'none'}>
+          <TouchableOpacity style={styles.stopButton} onPress={() => { setIsCameraOpen(false); setDisplayLabel(''); }}>
+            <Text style={styles.stopButtonText}>Stop Classification</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-    closeButton: {
-        zIndex: 2,
-        margin: 20
-    }
+  container: {
+    flex: 1,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  title: {
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  predictionLabel: {
+    marginBottom: 20,
+    textAlign: 'center',
+    fontSize: 16,
+    color: '#8FD49D',
+    fontWeight: '600',
+  },
+  cameraContainer: {
+    flex: 1,
+    alignSelf: 'stretch',
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginBottom: 20,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#8FD49D',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cameraAnimatedView: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  camera: {
+    flex: 1,
+    width: '100%',
+  },
+  startButtonOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  stopButtonOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 12,
+    paddingRight: 12,
+  },
+  startButton: {
+    backgroundColor: '#8FD49D',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    // shadowColor: '#8FD49D',
+    // shadowOffset: { width: 0, height: 4 },
+    // shadowOpacity: 0.5,
+    // shadowRadius: 8,
+    // elevation: 4,
+  },
+  startButtonText: {
+    color: '#000',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  stopButton: {
+    backgroundColor: 'rgba(255, 107, 107, 0.85)',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    // shadowColor: '#FF6B6B',
+    // shadowOffset: { width: 0, height: 2 },
+    // shadowOpacity: 0.4,
+    // shadowRadius: 4,
+    // elevation: 3,
+  },
+  stopButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
 });

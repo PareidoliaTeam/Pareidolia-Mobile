@@ -10,10 +10,10 @@
  * for setting the current dataset profile and the videos associated 
  * with each profile.
  */
-import { clearTmpFiles, logAllAppStorage, logStorageUsage, setSelectedModelProfile, clearTempDocuments, removeModelProfile, setMountedModelInfo } from '@/hooks/useVideoStorage';
+import { setSelectedModelProfile } from '@/hooks/useVideoStorage';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, Touchable, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import InputModal from './datasetCreationModal';
 
 type Props = {
@@ -29,64 +29,71 @@ function useModelTabContent({
   handleAddProfile,
   handleRemoveProfile
 }: Props) {
+  const [activeModel, setActiveModel] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+
+  const handleSetActive = async (profile: string) => {
+    await setSelectedModelProfile(profile);
+    setActiveModel(profile);
+    console.log(`Selected model profile: ${profile}`);
+  };
+
+  const showAddPrompt = () => {
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        'Add Model',
+        'Enter a model name',
+        (name) => { if (name && name.trim()) handleAddProfile(name.trim()); },
+        'plain-text'
+      );
+    } else {
+      setModalVisible(true);
+    }
+  };
+
+  const handleDelete = (profile: string) => {
+    Alert.alert(
+      'Delete Model',
+      `Are you sure you want to delete "${profile}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => handleRemoveProfile(profile) },
+      ]
+    );
+  };
+
   return (
     <>
       <InputModal
         visible={modalVisible}
-        title="Add Profile"
-        placeholder="Profile name"
+        title="Add Model"
+        placeholder="Model name"
         onConfirm={(value) => {
           setModalVisible(false);
           handleAddProfile(value);
         }}
         onCancel={() => setModalVisible(false)}
       />
-     
-      <ScrollView style={styles.container} contentContainerStyle={{paddingBottom: 40, paddingHorizontal: 20}}>
-        
-
-        <View style={styles.grid}>
-          {models.map(profile => (
-            <View key={profile} style={styles.cardContainer}>
-              <Text style={styles.smallButtonText}>{profile}</Text>
-              <TouchableOpacity
-                style={[styles.smallButton, { marginTop: 8, backgroundColor: '#4A90E2' }]}
-                onPress={async () => {
-                  await setSelectedModelProfile(profile);
-                  console.log(`Selected model profile: ${profile}`);
-                }}
-              >
-                <Text style={styles.smallButtonText}>Set Profile</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.smallButton, { marginTop: 8, backgroundColor: '#8B0000' }]}
-                onPress={async () => {
-                  await handleRemoveProfile(profile);
-                  console.log(`Deleted model profile: ${profile}`);
-                }}
-              >
-                <Text style={styles.smallButtonText}>Delete Profile</Text>
-              </TouchableOpacity>
-              
-            </View>
-          ))}
-          
-          {/* KEEP THIS COMMENTED OUT BLOCK FOR CLOUD SERVICE IMPLEMENTATION */}
-          {/* <TouchableOpacity 
-            style={[styles.cardContainer, styles.addCard]}
-            onPress={() => {
-              setModalVisible(true)
-              
-            }}
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 16, paddingTop: 12 }}>
+        {models.map(profile => (
+          <TouchableOpacity
+            key={profile}
+            style={[styles.card, activeModel === profile && styles.cardActive]}
+            onPress={() => handleSetActive(profile)}
+            activeOpacity={0.75}
           >
-            <Text style={styles.addIcon}>+</Text>
-            <Text style={styles.smallButtonText}>Add Profile</Text>
-          </TouchableOpacity> */}
-          {/* KEEP THIS COMMENTED OUT BLOCK FOR CLOUD SERVICE IMPLEMENTATION */}
-
-        </View>
+            <View style={styles.cardLeft}>
+              <View style={[styles.activeDot, activeModel === profile && styles.activeDotOn]} />
+              <Text style={styles.profileName} numberOfLines={2}>{profile}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => handleDelete(profile)}
+            >
+              <Text style={styles.deleteButtonText}>Delete</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        ))}
       </ScrollView>
     </>
   );
@@ -99,60 +106,54 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  titleContainer: {
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    backgroundColor: '#000',  // Also change this back from #b62d2d
-    paddingTop: 10,
-  },
-  header: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 40,
-    textAlign: 'center',
-  },
-  smallButton: {
-    backgroundColor: '#8FD49D',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignSelf: 'center',
-    minWidth: 90,
-  },
-  smallButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  grid: {
+  card: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  cardContainer: {
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#1C1C1E',
-    padding: 20,
     borderRadius: 12,
-    width: '48%',
-    height: 150,
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: '#ffffff',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#333',
   },
-  addCard: {
-    borderStyle: 'dashed',
-    borderWidth: 2,
+  cardActive: {
     borderColor: '#8FD49D',
-    backgroundColor: 'transparent',
+    backgroundColor: '#1a2b1e',
   },
-  addIcon: {
-    fontSize: 48,
-    color: '#8FD49D',
-    fontWeight: '300',
+  cardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 10,
+  },
+  activeDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#444',
+  },
+  activeDotOn: {
+    backgroundColor: '#8FD49D',
+  },
+  profileName: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+  },
+  deleteButton: {
+    backgroundColor: '#2C2C2E',
+    borderWidth: 1,
+    borderColor: '#5a1a1a',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  deleteButtonText: {
+    color: '#ff4444',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
