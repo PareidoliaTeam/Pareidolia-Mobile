@@ -16,10 +16,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { getInfoAsync, readAsStringAsync } from 'expo-file-system/legacy'; // Read files as base64
 import { Image } from 'expo-image';
 import * as ImagePicker from "expo-image-picker";
-import { useLocalSearchParams, useNavigation } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { createVideoPlayer, useVideoPlayer, VideoView } from "expo-video";
-import React, { useEffect, useLayoutEffect, useState } from "react";
-import { Alert, FlatList, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { Alert, FlatList, Platform, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { addProfileVideo, getDesktopVideosSent, getProfileVideos, removeProfileVideo, setDesktopVideosSent } from "../../hooks/useVideoStorage";
 
@@ -49,14 +49,95 @@ function ActiveVideoPlayer({ uri, toggle }: { uri: string; toggle: boolean }) {
 }
 
 // A global utility to generate a thumbnail without occupying too much memory
+const normalizeVideoUri = (uri: string): string => {
+  if (!uri) return uri;
+  if (uri.startsWith('file://') || uri.startsWith('content://') || uri.startsWith('ph://')) {
+    return uri;
+  }
+  if (uri.startsWith('/')) {
+    return `file://${uri}`;
+  }
+  return uri;
+};
+
+// On iOS, createVideoPlayer + immediate generateThumbnailsAsync returns empty arrays because
+// AVPlayer loads asynchronously. We must wait for 'readyToPlay' before extracting frames.
+// This uses the same AVPlayer code path that works for VideoView playback.
+const generateVideoThumbnailIOS = (normalizedUri: string): Promise<any | null> => {
+  return new Promise((resolve) => {
+    const player = createVideoPlayer(normalizedUri);
+    player.muted = true;
+    player.pause();
+    let settled = false;
+
+    const done = (result: any) => {
+      if (settled) return;
+      settled = true;
+      if (typeof player.release === 'function') player.release();
+      resolve(result);
+    };
+
+    const timeout = setTimeout(() => {
+      console.warn('[thumb-ios] timed out waiting for readyToPlay', { normalizedUri });
+      done(null);
+    }, 10000);
+
+    const sub = player.addListener('statusChange', async ({ status }: any) => {
+      if (status !== 'readyToPlay' && status !== 'error') return;
+      sub.remove();
+      clearTimeout(timeout);
+
+      if (status === 'error') {
+        console.warn('[thumb-ios] player reported error status');
+        done(null);
+        return;
+      }
+
+      for (const t of [0, 0.5, 1.0]) {
+        try {
+          const thumbs = await player.generateThumbnailsAsync([t]);
+          if (thumbs?.[0]) {
+            console.log('[thumb-ios] success after readyToPlay', { t, width: thumbs[0].width, height: thumbs[0].height });
+            done(thumbs[0]);
+            return;
+          }
+        } catch (e) {
+          console.warn('[thumb-ios] attempt failed after readyToPlay', { t, message: e instanceof Error ? e.message : String(e) });
+        }
+      }
+
+      console.warn('[thumb-ios] no thumbnail after readyToPlay', { normalizedUri });
+      done(null);
+    });
+  });
+};
+
 const generateVideoThumbnail = async (uri: string): Promise<any | null> => {
+  const normalizedUri = normalizeVideoUri(uri);
+
+  if (Platform.OS === 'ios') {
+    return generateVideoThumbnailIOS(normalizedUri);
+  }
+
+  // Android: player loads synchronously (ExoPlayer), immediate call works fine
   let player: any = null;
   try {
-    player = createVideoPlayer(uri);
-    const thumb = await player.generateThumbnailsAsync([0]);
-    return thumb[0] || null;
+    player = createVideoPlayer(normalizedUri);
+    for (const t of [0, 0.5, 1.0]) {
+      try {
+        const thumbs = await player.generateThumbnailsAsync([t]);
+        if (thumbs?.[0]) {
+          console.log('[thumb-android] success', { t, width: thumbs[0].width, height: thumbs[0].height });
+          return thumbs[0];
+        }
+      } catch (e) {
+        console.warn('[thumb-android] attempt failed', { t, message: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    console.warn('[thumb-android] no thumbnail after all attempts', { normalizedUri });
+    return null;
   } catch (error) {
-    console.warn('Failed generating thumbnail with expo-video:', error);
+    console.warn('[thumb-android] fatal error', { message: error instanceof Error ? error.message : String(error) });
     return null;
   } finally {
     if (player && typeof player.release === 'function') {
@@ -73,8 +154,11 @@ function VideoPlayer({ uri, toggle, selected, isPlaying, onPlay, onPress }: { ur
     let isMounted = true;
     if (!uri) return;
 
+    setThumbnail(null);
     generateVideoThumbnail(uri).then((thumb) => {
-      if (isMounted && thumb) setThumbnail(thumb);
+      if (isMounted) {
+        setThumbnail(thumb);
+      }
     });
 
     return () => { isMounted = false; };
@@ -141,13 +225,14 @@ export default function ProfileVideos() {
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
   const [sentVideos, setSentVideos] = useState<{ [fileName: string]: boolean }>({});
   const navigation = useNavigation();
+  const router = useRouter();
 
   // multi-select toggle in header
   useLayoutEffect(() => {
     navigation.setOptions({
       headerLeft: () => (
         <TouchableOpacity
-          onPress={() => navigation.goBack()}
+          onPress={() => router.navigate('/tabs/profiles')}
           style={{
             marginLeft: 12,
             width: 56,
@@ -190,7 +275,19 @@ export default function ProfileVideos() {
         </TouchableOpacity>
       ),
     });
-  }, [navigation, toggle]);
+  }, [navigation, toggle, router]);
+
+  // Reset selection when entering or leaving the screen
+  useFocusEffect(
+    useCallback(() => {
+      setSelectedVideos(new Set());
+      setToggle(false);
+      return () => {
+        setSelectedVideos(new Set());
+        setToggle(false);
+      };
+    }, [])
+  );
 
   // Load videos for the selected profile on mount and when profile changes
   useEffect(() => {
@@ -541,7 +638,7 @@ export default function ProfileVideos() {
 
       {/* Back button */}
       <TouchableOpacity
-        onPress={() => navigation.goBack()}
+        onPress={() => router.navigate('/tabs/profiles')}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 12, paddingTop: 8 }}
       >
         <Ionicons name="chevron-back" size={24} color="#8FD49D" />
