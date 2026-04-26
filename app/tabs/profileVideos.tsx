@@ -14,11 +14,12 @@
 import { useServer } from '@/contexts/ServerContext'; // Context hook for sharing server IP
 import { Ionicons } from '@expo/vector-icons';
 import { getInfoAsync, readAsStringAsync } from 'expo-file-system/legacy'; // Read files as base64
+import { Image } from 'expo-image';
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useNavigation } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { createVideoPlayer, useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useLayoutEffect, useState } from "react";
-import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Alert, FlatList, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { addProfileVideo, getDesktopVideosSent, getProfileVideos, removeProfileVideo, setDesktopVideosSent } from "../../hooks/useVideoStorage";
 
@@ -30,27 +31,87 @@ interface FileItem {
   datasetName?: string;
 }
 
-// video player component with toggleable native controls and selection outline (can be turned into hook later)
-function VideoPlayer({ uri, toggle, selected, onPress }: { uri: string; toggle: boolean; selected: boolean; onPress: () => void }) {
+// separate component prevents OOM crash since it doesn't initialize a full ExoPlayer immediately
+function ActiveVideoPlayer({ uri, toggle }: { uri: string; toggle: boolean }) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
+    p.play();
   });
 
   return (
-    <View style={{ position: 'relative' }}>
-      <VideoView
-        player={player}
-        style={{ width: '100%', height: 200 }}
-        contentFit="cover"
-        nativeControls={!toggle}
-      />
+    <VideoView
+      player={player}
+      style={{ width: '100%', height: 200 }}
+      contentFit="cover"
+      nativeControls={!toggle}
+    />
+  );
+}
+
+// A global utility to generate a thumbnail without occupying too much memory
+const generateVideoThumbnail = async (uri: string): Promise<any | null> => {
+  let player: any = null;
+  try {
+    player = createVideoPlayer(uri);
+    const thumb = await player.generateThumbnailsAsync([0]);
+    return thumb[0] || null;
+  } catch (error) {
+    console.warn('Failed generating thumbnail with expo-video:', error);
+    return null;
+  } finally {
+    if (player && typeof player.release === 'function') {
+      player.release();
+    }
+  }
+};
+
+// video player component with toggleable native controls and selection outline (can be turned into hook later)
+function VideoPlayer({ uri, toggle, selected, isPlaying, onPlay, onPress }: { uri: string; toggle: boolean; selected: boolean; isPlaying: boolean; onPlay: () => void; onPress: () => void }) {
+  const [thumbnail, setThumbnail] = useState<any | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!uri) return;
+
+    generateVideoThumbnail(uri).then((thumb) => {
+      if (isMounted && thumb) setThumbnail(thumb);
+    });
+
+    return () => { isMounted = false; };
+  }, [uri]);
+
+  return (
+    <View style={{ position: 'relative', width: '100%', height: 200 }}>
+      {isPlaying && !toggle ? (
+        <ActiveVideoPlayer uri={uri} toggle={toggle} />
+      ) : (
+        <>
+          {thumbnail ? (
+            <Image source={thumbnail} contentFit="cover" style={{ width: '100%', height: '100%' }} />
+          ) : (
+            <View style={{ width: '100%', height: '100%', backgroundColor: '#222', justifyContent: 'center', alignItems: 'center' }}>
+              <Ionicons name="videocam-outline" size={48} color="#444" />
+            </View>
+          )}
+
+          {!toggle && (
+            <TouchableOpacity
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}
+              onPress={onPlay}
+            >
+              <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.7)" />
+            </TouchableOpacity>
+          )}
+        </>
+      )}
+
       {toggle && (
         <TouchableOpacity
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
           onPress={onPress}
           activeOpacity={0.7}
         />
-)}
+      )}
       {toggle && (
         <TouchableOpacity
           onPress={onPress}
@@ -76,6 +137,7 @@ export default function ProfileVideos() {
   const { profile } = useLocalSearchParams<{ profile: string }>();
   const [videos, setVideos] = useState<string[]>([]);
   const [toggle, setToggle] = useState(false);
+  const [playingVideo, setPlayingVideo] = useState<string | null>(null);
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
   const [sentVideos, setSentVideos] = useState<{ [fileName: string]: boolean }>({});
   const navigation = useNavigation();
@@ -221,6 +283,7 @@ export default function ProfileVideos() {
   const handleToggle = () => {
     setToggle((prev) => !prev);
     setSelectedVideos(new Set());
+    setPlayingVideo(null); // Stop any playing video when toggling mode
   };
 
   /**
@@ -551,43 +614,51 @@ export default function ProfileVideos() {
         </View>
       )}
 
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-        {videos.length === 0 ? (
-
+      {videos.length === 0 ? (
+        <View style={{ padding: 20, alignItems: 'center' }}>
           <Text style={{ color: "#fff", textAlign: "center" }}>No videos found.</Text>
-
-        ) : (
-
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-            {videos.map((uri) => {
-              const fileName = uri.split('/').pop() || '';
-              const isSent = sentVideos[fileName];
-              return (
-                <View
-                  key={uri}
-                  style={{
-                    width: '48%',
-                    marginBottom: 16,
-                    backgroundColor: '#111',
-                    borderRadius: 10,
-                    overflow: 'hidden',
-                    borderWidth: 2,
-                    borderColor: isSent ? '#ff855c' : selectedVideos.has(uri) ? '#4A90E2' : '#333',
-                  }}
+        </View>
+      ) : (
+        <FlatList
+          data={videos}
+          keyExtractor={(item) => item}
+          numColumns={2}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
+          columnWrapperStyle={{ justifyContent: 'space-between' }}
+          renderItem={({ item: uri }) => {
+            const fileName = uri.split('/').pop() || '';
+            const isSent = sentVideos[fileName];
+            return (
+              <View
+                style={{
+                  width: '48%',
+                  marginBottom: 16,
+                  backgroundColor: '#111',
+                  borderRadius: 10,
+                  overflow: 'hidden',
+                  borderWidth: 2,
+                  borderColor: isSent ? '#ff855c' : selectedVideos.has(uri) ? '#4A90E2' : '#333',
+                }}
+              >
+                <VideoPlayer
+                  uri={uri}
+                  toggle={toggle}
+                  selected={selectedVideos.has(uri)}
+                  isPlaying={playingVideo === uri}
+                  onPlay={() => setPlayingVideo(uri)}
+                  onPress={() => handleVideoSelection(uri)}
+                />
+                <TouchableOpacity
+                  onPress={() => handleRemoveWithConfirm(uri)}
+                  style={{ marginVertical: 8, marginHorizontal: 10, paddingVertical: 8, borderRadius: 8, backgroundColor: '#3a0000', alignItems: 'center' }}
                 >
-                  <VideoPlayer uri={uri} toggle={toggle} selected={selectedVideos.has(uri)} onPress={() => handleVideoSelection(uri)} />
-                  <TouchableOpacity
-                    onPress={() => handleRemoveWithConfirm(uri)}
-                    style={{ marginVertical: 8, marginHorizontal: 10, paddingVertical: 8, borderRadius: 8, backgroundColor: '#3a0000', alignItems: 'center' }}
-                  >
-                    <Text style={{ color: '#ff4444', fontWeight: '600', fontSize: 13 }}>Remove</Text>
-                  </TouchableOpacity>
-                </View>
-              );
-            })}
-          </View>
-        )}
-      </ScrollView>
+                  <Text style={{ color: '#ff4444', fontWeight: '600', fontSize: 13 }}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          }}
+        />
+      )}
 
     </SafeAreaView>
   );
