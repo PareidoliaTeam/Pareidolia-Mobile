@@ -34,9 +34,10 @@ export default function Index() {
   const [modelPath, setModelPath] = useState<string | null>(null);
   const [modelLabels, setModelLabels] = useState<string[]>([]);
   const [inputShape, setInputShape] = useState<number[] | null>(null);
-  const [outputShape, setOutputShape] = useState<number[] | null>(null);
   const [displayLabel, setDisplayLabel] = useState<string>(''); // State to hold the label to display on the screen
   const lastLabel = useSharedValue("");
+  const isClassifying = useSharedValue(false);
+  const isScreenFocusedRef = useRef(false);
 
   // Animated opacity values for smooth camera transitions
   // closeButtonOpacity starts at 1 since camera is closed by default
@@ -45,16 +46,35 @@ export default function Index() {
 
   // updating display label from the frame processor using useRunOnJS to run on the JS thread
   const updateDisplayLabel = useRunOnJS((label: string) => {
+    if (!isScreenFocusedRef.current) return;
     setDisplayLabel((prev) => (prev === label ? prev : label));
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       // Reset state when screen is focused
+      isScreenFocusedRef.current = true;
+      isClassifying.value = false;
+      lastLabel.value = "";
       setIsCameraOpen(false);
       setDisplayLabel('');
-    }, [])
+
+      return () => {
+        isScreenFocusedRef.current = false;
+        isClassifying.value = false;
+        lastLabel.value = "";
+        setIsCameraOpen(false);
+        setDisplayLabel('');
+      };
+    }, [isClassifying, lastLabel])
   );
+
+  useEffect(() => {
+    isClassifying.value = isCameraOpen && isScreenFocusedRef.current;
+    if (!isCameraOpen) {
+      lastLabel.value = "";
+    }
+  }, [isCameraOpen, isClassifying, lastLabel]);
 
   // Animate opacity when camera opens/closes
   useEffect(() => {
@@ -131,7 +151,6 @@ export default function Index() {
       const inputShape = model.inputs[0].shape; // Assuming single input tensor
       const outputShape = model.outputs[0].shape; // Assuming single output tensor
       setInputShape(inputShape);
-      setOutputShape(outputShape);
       console.log('Model input shape:', inputShape);
       console.log('Model output shape:', outputShape);
       return () => {
@@ -159,7 +178,7 @@ export default function Index() {
         </TouchableOpacity>
       ),
     });
-  }, [navigation]);
+  }, [navigation, router]);
 
   // Setup resize plugin and frame processor only when model is loaded
   const { resize } = useResizePlugin();
@@ -176,6 +195,7 @@ export default function Index() {
    */
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet';
+    if (!isClassifying.value) return;
     if (!model) return;
     const data = resize(frame, { // capture YUV frame
       scale: {                   // resize to desired size (can be changed dynamically later)
@@ -198,7 +218,7 @@ export default function Index() {
       updateDisplayLabel(predictedLabel);
     }
 
-  }, [model, inputShape, modelLabels, updateDisplayLabel, lastLabel]);
+  }, [model, inputShape, modelLabels, updateDisplayLabel, lastLabel, isClassifying]);
 
   /**
    * @description Handles opening the camera for live classification
@@ -206,10 +226,12 @@ export default function Index() {
    */
   const handleOpenCamera = async () => {
     const permission = await Camera.requestCameraPermission();
-    if (permission == 'denied') {
+    if (permission === 'denied') {
       alert('Camera permission is required for continuous classification');
       return;
     }
+    if (!isScreenFocusedRef.current) return;
+    isClassifying.value = true;
     setIsCameraOpen(true);
   }
 
@@ -243,7 +265,7 @@ export default function Index() {
         </Animated.View>
 
         <Animated.View style={[styles.stopButtonOverlay, { opacity: cameraOpacity }]} pointerEvents={isCameraOpen ? 'auto' : 'none'}>
-          <TouchableOpacity style={styles.stopButton} onPress={() => { setIsCameraOpen(false); setDisplayLabel(''); }}>
+          <TouchableOpacity style={styles.stopButton} onPress={() => { isClassifying.value = false; setIsCameraOpen(false); setDisplayLabel(''); }}>
             <Text style={styles.stopButtonText}>Stop Classification</Text>
           </TouchableOpacity>
         </Animated.View>
