@@ -13,12 +13,11 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useServer } from '@/contexts/ServerContext'; // Access server IP from QR scanner
-import { useLayoutEffect, useState } from 'react';
-import { ActivityIndicator, Modal, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { downloadModelFile } from "../../hooks/useVideoStorage";
-import { useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Modal, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { downloadModelFile, getModelProfilesList } from "../../hooks/useVideoStorage";
 
 type FileDict = {
     [datasetName: string]: {
@@ -82,9 +81,32 @@ export default function ReceiveScreen() {
 
   const [downloadedModelMessage, setDownloadedModelMessage] = useState<string | null>(null); // State for downloaded model path
   
+  const [downloadedModels, setDownloadedModels] = useState<Set<string>>(new Set()); // Track which models are already downloaded
+  
   const navigation = useNavigation();
 
   const router = useRouter();
+
+  const hasFetchedOnce = useRef(false);
+
+  // Auto-fetch when the Import tab is focused
+  useFocusEffect(
+    useCallback(() => {
+      if (serverIP) {
+        fetchModelsList();
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [serverIP])
+  );
+
+  // Check which models are already downloaded
+  useEffect(() => {
+    const checkDownloadedModels = async () => {
+      const profiles = await getModelProfilesList();
+      setDownloadedModels(new Set(Object.keys(profiles)));
+    };
+    checkDownloadedModels();
+  }, []);
 
   useLayoutEffect(() => {
         navigation.getParent()?.setOptions({
@@ -199,7 +221,10 @@ export default function ReceiveScreen() {
       await downloadModelFile(modelName, serverIP);
       setDownloadedModelMessage(`Model ${modelName} downloaded successfully.`);
       console.log(`Model ${modelName} downloaded successfully.`);
-
+      
+      // Refresh the downloaded models list
+      const profiles = await getModelProfilesList();
+      setDownloadedModels(new Set(Object.keys(profiles)));
 
 
     } catch (err) {
@@ -242,15 +267,18 @@ export default function ReceiveScreen() {
 
       <ThemedText type="title" style={styles.title}>Receive Files</ThemedText>
       
-      <ThemedView style={styles.statusContainer}>
-        {serverIP ? (
+      {/* <ThemedView style={styles.statusContainer}> */}
+        {/* {serverIP ? (
           <ThemedText style={styles.statusText}>Connected to: {serverIP}</ThemedText>
         ) : (
           <ThemedText style={styles.errorText}>Not connected - scan QR code first</ThemedText>
+        )} */}
+        {/* {!serverIP && (
+          <ThemedText style={styles.errorText}>Not connected - scan QR code first</ThemedText>
         )}
-      </ThemedView>
+      </ThemedView> */}
 
-      <ThemedView style={styles.buttonContainer}>
+      {/* <ThemedView style={styles.buttonContainer}>
         <ThemedView 
           style={[styles.button, !serverIP && styles.buttonDisabled]}
           onTouchEnd={serverIP ? fetchModelsList : undefined}
@@ -259,7 +287,7 @@ export default function ReceiveScreen() {
             {loading ? 'Loading...' : 'Fetch Models'}
           </ThemedText>
         </ThemedView>
-      </ThemedView>
+      </ThemedView> */}
 
       {error && (
         <ThemedView style={styles.errorContainer}>
@@ -280,21 +308,36 @@ export default function ReceiveScreen() {
         {loading && Object.keys(files).length === 0 ? (
           <ActivityIndicator size="large" style={styles.loader} />
         ) : Object.keys(files).length === 0 ? (
-          <ThemedText style={styles.emptyText}>No models yet. Tap "Fetch Models" to load.</ThemedText>
+          <ThemedText style={styles.emptyText}>No models available. Connect to a server and pull down to refresh.</ThemedText>
         ) : (
-          Object.entries(files).map(([modelName, fields]) => (
+          Object.entries(files).map(([modelName, fields]) => {
+            const isDownloaded = downloadedModels.has(modelName);
+            return (
             <ThemedView key={modelName} style={styles.fileItem}>
-              <ThemedText style={styles.fileName}>{modelName}</ThemedText>
-              <ThemedText style={styles.fileDetails}>{fields.path}</ThemedText>
-              <TouchableOpacity
-                style={styles.button}
-                onPress={() => fetchModel(modelName)}
-                disabled={downloading !== null}
-              >
-                <ThemedText style={styles.buttonText}>{downloading === modelName ? 'Downloading...' : 'Download'}</ThemedText>
-              </TouchableOpacity>
+              <View style={styles.fileItemHeader}>
+                <ThemedText style={styles.fileName}>{modelName}</ThemedText>
+                {isDownloaded ? (
+                  <Ionicons name="checkmark-circle" size={24} color="#8FD49D" />
+                ) : (
+                  <Ionicons name="close-circle" size={24} color="#999" />
+                )}
+              </View>
+              {/* <ThemedText style={styles.fileDetails}>{fields.path}</ThemedText> */}
+              <View style={styles.fileItemFooter}>
+                <ThemedText style={styles.fileDetails}>Labels: {Object.keys(fields.labels).join(', ')}</ThemedText>
+                <TouchableOpacity
+                  style={[styles.downloadButton, downloading !== null && styles.buttonDisabled]}
+                  onPress={() => fetchModel(modelName)}
+                  disabled={downloading !== null}
+                >
+                  {downloading === modelName
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Ionicons name="download-outline" size={20} color="#fff" />}
+                </TouchableOpacity>
+              </View>
             </ThemedView>
-          ))
+            );
+          })
         )}
       </ScrollView>
     </ThemedView>
@@ -327,6 +370,20 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 8,
     alignItems: 'center',
+  },
+  fileItemFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  downloadButton: {
+    backgroundColor: '#007AFF',
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-end',
   },
   buttonDisabled: {
     backgroundColor: '#ccc',
@@ -367,10 +424,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 10,
   },
+  fileItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
   fileName: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 5,
+    flex: 1,
   },
   fileDetails: {
     fontSize: 14,

@@ -14,16 +14,16 @@
 import useDatasetTabContent from "@/hooks/datasetTab";
 import useModelTabContent from "@/hooks/modelTab";
 import { addDatasetProfile, addModelProfile, clearTempDocuments, clearTmpFiles, getDatasetProfiles, getModelProfiles, logAllAppStorage, logStorageUsage, removeDatasetProfile, removeModelProfile } from "@/hooks/useVideoStorage";
-import { useFocusEffect, useRouter, useNavigation } from "expo-router";
-import { useCallback, useState, useLayoutEffect } from "react";
+import { Ionicons } from '@expo/vector-icons'; // For icons in the header
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
+import { useCallback, useLayoutEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from '@expo/vector-icons'; // For icons in the header
 
 export default function Index() {
   const router = useRouter();
   const [profiles, setProfiles] = useState<string[]>([]);
-  const [selectedTab, setSelectedTab] = useState<'dataset' | 'model'>('dataset');
+  const [selectedTab, setSelectedTab] = useState<'dataset' | 'model' | 'admin'>('dataset');
   const navigation = useNavigation();
 
   useLayoutEffect(() => {
@@ -103,65 +103,57 @@ export default function Index() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      {/* --------- admin tools start -----------*/}
-      <View style={styles.buttonRow}>
-        <TouchableOpacity
-          style={styles.smallButton}
-          onPress={async () => {
-            await logStorageUsage();  
-          }}
-        >
-          <Text style={styles.smallButtonText}>Show Logs</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.smallButton}
-          onPress={async () => {
-            await logAllAppStorage();
-          }}
-        >
-          <Text style={styles.smallButtonText}>Show All App Storage</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.smallButton, { backgroundColor: '#8B0000' }]}
-          onPress={async () => {
-            await clearTmpFiles();
-          }}
-        >
-          <Text style={styles.smallButtonText}>Clear Tmp Files</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.smallButton, { backgroundColor: '#8B0000' }]}
-          onPress={async () => {
-            await clearTempDocuments();
-          }}
-        >
-          <Text style={styles.smallButtonText}>Clear Document Files</Text>
-        </TouchableOpacity>
-      </View>
-      {/* --------- admin tools end -----------*/}
-
       <View style={styles.tabBar}>
-        {(['dataset', 'model'] as const).map(tab => (
+        {(['dataset', 'model', 'admin'] as const).map(tab => (
           <TouchableOpacity
             key={tab}
             style={[styles.tab, selectedTab === tab && styles.activeTab]}
             onPress={() => setSelectedTab(tab)}
           >
             <Text style={[styles.tabText, selectedTab === tab && styles.activeTabText]}>
-              {tab === 'dataset' ? 'Datasets' : 'Models'}
+              {tab === 'dataset' ? 'Datasets' : tab === 'model' ? 'Models' : 'Admin'}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
       <View style={styles.tabContent}>
-        <View style={styles.titleContainer}>
-                <Text style={styles.header}>{selectedTab === 'dataset' ? 'Dataset Profiles' : 'Model Profiles'}</Text>
+        {selectedTab === 'admin' ? (
+          <View style={styles.adminContainer}>
+            <Text style={styles.header}>Admin Tools</Text>
+            <TouchableOpacity
+              style={styles.smallButton}
+              onPress={async () => { await logStorageUsage(); }}
+            >
+              <Text style={styles.smallButtonText}>Show Logs</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.smallButton}
+              onPress={async () => { await logAllAppStorage(); }}
+            >
+              <Text style={styles.smallButtonText}>Show All App Storage</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.smallButton, { backgroundColor: '#8B0000' }]}
+              onPress={async () => { await clearTmpFiles(); }}
+            >
+              <Text style={styles.smallButtonText}>Clear Tmp Files</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.smallButton, { backgroundColor: '#8B0000' }]}
+              onPress={async () => { await clearTempDocuments(); }}
+            >
+              <Text style={styles.smallButtonText}>Clear Document Files</Text>
+            </TouchableOpacity>
           </View>
-        {selectedTab === 'dataset' ? datasetTabContent : modelTabContent}
+        ) : (
+          <>
+            <View style={styles.titleContainer}>
+              {/* <Text style={styles.header}>{selectedTab === 'dataset' ? 'Dataset Profiles' : 'Model Profiles'}</Text> */}
+            </View>
+            {selectedTab === 'dataset' ? datasetTabContent : modelTabContent}
+          </>
+        )}
       </View>
 
     </SafeAreaView>
@@ -174,18 +166,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   buttonRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    marginTop: -20,
-    marginBottom: 4,
+    display: 'none',
+  },
+  adminContainer: {
+    flex: 1,
+    alignItems: 'center',
+    paddingTop: 30,
+    gap: 14,
+    paddingHorizontal: 24,
   },
   tabBar: {
   flexDirection: 'row',
   paddingHorizontal: 16,
-  paddingTop: 0,
+  paddingTop: 10,
   alignItems: 'flex-end',   // inactive tabs sit lower
   justifyContent: 'center',
   gap: 8
@@ -239,11 +232,16 @@ tabContent: {
   },
   smallButton: {
     backgroundColor: '#8FD49D',
-    paddingVertical: 6,
+    paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
-    alignSelf: 'center',
-    minWidth: 90,
+    borderRadius: 10,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    // shadowColor: '#8FD49D',
+    // shadowOffset: { width: 0, height: 3 },
+    // shadowOpacity: 0.4,
+    // shadowRadius: 6,
+    // elevation: 3,
   },
   smallButtonText: {
     color: '#fff',

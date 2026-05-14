@@ -11,16 +11,12 @@
  * specific screen and has its own icon and label for easy identification by the user.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { Stack, Tabs, useRouter } from 'expo-router';
-import { TouchableOpacity } from 'react-native';
+import { Tabs } from 'expo-router';
 
 // Shows the tabs information and icons at the bottom
 export default function TabsLayout() {
-  const router = useRouter();
-
   return (
-    <>
-      <Tabs
+    <Tabs
         screenOptions={{
           headerShown: false,
           headerTitleAlign: 'center',
@@ -36,6 +32,7 @@ export default function TabsLayout() {
           name="camera"
           options={{
             title: 'Camera',
+            headerShown: false,
             tabBarLabel: 'Camera',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="camera-outline" color={color} size={size} />
@@ -46,6 +43,7 @@ export default function TabsLayout() {
           name="profiles"   
           options={{
             title: 'Profiles',
+            headerShown: false,
             tabBarLabel: 'Profiles',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="albums-outline" color={color} size={size} />
@@ -56,6 +54,7 @@ export default function TabsLayout() {
           name="classify"   
           options={{
             title: 'Classify',
+            headerShown: false,
             tabBarLabel: 'Classify',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="move-outline" color={color} size={size} />
@@ -66,13 +65,31 @@ export default function TabsLayout() {
           name="logStuff"   
           options={{
             title: 'Logs',
-            tabBarLabel: 'Logs',
+            headerShown: false,
+            tabBarLabel: 'Import',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="document-text-outline" color={color} size={size} />
             ),
           }}
         />
+        <Tabs.Screen
+          name="qrScanner"   
+          options={{
+            title: 'Connect',
+            headerShown: false,
+            tabBarLabel: 'Connect',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="qr-code-outline" color={color} size={size} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="profileVideos"
+          options={{
+            href: null,
+            headerShown: false,
+          }}
+        />
       </Tabs>
-    </>
-  );
-}
+    );
+  }

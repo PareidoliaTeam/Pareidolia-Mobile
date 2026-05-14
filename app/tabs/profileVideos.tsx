@@ -12,14 +12,16 @@
  */
 
 import { useServer } from '@/contexts/ServerContext'; // Context hook for sharing server IP
+import { Ionicons } from '@expo/vector-icons';
 import { getInfoAsync, readAsStringAsync } from 'expo-file-system/legacy'; // Read files as base64
+import { Image } from 'expo-image';
 import * as ImagePicker from "expo-image-picker";
-import { useLocalSearchParams, useNavigation } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useEffect, useLayoutEffect, useState } from "react";
-import { Alert, Button, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { createVideoPlayer, useVideoPlayer, VideoView } from "expo-video";
+import React, { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { Alert, FlatList, Platform, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { addProfileVideo, getDesktopVideosSent, getProfileVideos, removeProfileVideo, setDesktopVideosSent } from "../hooks/useVideoStorage";
+import { addProfileVideo, getDesktopVideosSent, getProfileVideos, removeProfileVideo, setDesktopVideosSent } from "../../hooks/useVideoStorage";
 
 interface FileItem {
   name: string;
@@ -29,27 +31,171 @@ interface FileItem {
   datasetName?: string;
 }
 
-// video player component with toggleable native controls and selection outline (can be turned into hook later)
-function VideoPlayer({ uri, toggle, selected, onPress }: { uri: string; toggle: boolean; selected: boolean; onPress: () => void }) {
+// separate component prevents OOM crash since it doesn't initialize a full ExoPlayer immediately
+function ActiveVideoPlayer({ uri, toggle }: { uri: string; toggle: boolean }) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
+    p.play();
   });
 
   return (
-    <View style={{ position: 'relative' }}>
-      <VideoView
-        player={player}
-        style={{ width: '100%', height: 200 }}
-        contentFit="cover"
-        nativeControls={!toggle}
-      />
+    <VideoView
+      player={player}
+      style={{ width: '100%', height: 200 }}
+      contentFit="cover"
+      nativeControls={!toggle}
+    />
+  );
+}
+
+// A global utility to generate a thumbnail without occupying too much memory
+const normalizeVideoUri = (uri: string): string => {
+  if (!uri) return uri;
+  if (uri.startsWith('file://') || uri.startsWith('content://') || uri.startsWith('ph://')) {
+    return uri;
+  }
+  if (uri.startsWith('/')) {
+    return `file://${uri}`;
+  }
+  return uri;
+};
+
+// On iOS, createVideoPlayer + immediate generateThumbnailsAsync returns empty arrays because
+// AVPlayer loads asynchronously. We must wait for 'readyToPlay' before extracting frames.
+// This uses the same AVPlayer code path that works for VideoView playback.
+const generateVideoThumbnailIOS = (normalizedUri: string): Promise<any | null> => {
+  return new Promise((resolve) => {
+    const player = createVideoPlayer(normalizedUri);
+    player.muted = true;
+    player.pause();
+    let settled = false;
+
+    const done = (result: any) => {
+      if (settled) return;
+      settled = true;
+      if (typeof player.release === 'function') player.release();
+      resolve(result);
+    };
+
+    const timeout = setTimeout(() => {
+      console.warn('[thumb-ios] timed out waiting for readyToPlay', { normalizedUri });
+      done(null);
+    }, 10000);
+
+    const sub = player.addListener('statusChange', async ({ status }: any) => {
+      if (status !== 'readyToPlay' && status !== 'error') return;
+      sub.remove();
+      clearTimeout(timeout);
+
+      if (status === 'error') {
+        console.warn('[thumb-ios] player reported error status');
+        done(null);
+        return;
+      }
+
+      for (const t of [0, 0.5, 1.0]) {
+        try {
+          const thumbs = await player.generateThumbnailsAsync([t]);
+          if (thumbs?.[0]) {
+            console.log('[thumb-ios] success after readyToPlay', { t, width: thumbs[0].width, height: thumbs[0].height });
+            done(thumbs[0]);
+            return;
+          }
+        } catch (e) {
+          console.warn('[thumb-ios] attempt failed after readyToPlay', { t, message: e instanceof Error ? e.message : String(e) });
+        }
+      }
+
+      console.warn('[thumb-ios] no thumbnail after readyToPlay', { normalizedUri });
+      done(null);
+    });
+  });
+};
+
+const generateVideoThumbnail = async (uri: string): Promise<any | null> => {
+  const normalizedUri = normalizeVideoUri(uri);
+
+  if (Platform.OS === 'ios') {
+    return generateVideoThumbnailIOS(normalizedUri);
+  }
+
+  // Android: player loads synchronously (ExoPlayer), immediate call works fine
+  let player: any = null;
+  try {
+    player = createVideoPlayer(normalizedUri);
+    for (const t of [0, 0.5, 1.0]) {
+      try {
+        const thumbs = await player.generateThumbnailsAsync([t]);
+        if (thumbs?.[0]) {
+          console.log('[thumb-android] success', { t, width: thumbs[0].width, height: thumbs[0].height });
+          return thumbs[0];
+        }
+      } catch (e) {
+        console.warn('[thumb-android] attempt failed', { t, message: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    console.warn('[thumb-android] no thumbnail after all attempts', { normalizedUri });
+    return null;
+  } catch (error) {
+    console.warn('[thumb-android] fatal error', { message: error instanceof Error ? error.message : String(error) });
+    return null;
+  } finally {
+    if (player && typeof player.release === 'function') {
+      player.release();
+    }
+  }
+};
+
+// video player component with toggleable native controls and selection outline (can be turned into hook later)
+function VideoPlayer({ uri, toggle, selected, isPlaying, onPlay, onPress }: { uri: string; toggle: boolean; selected: boolean; isPlaying: boolean; onPlay: () => void; onPress: () => void }) {
+  const [thumbnail, setThumbnail] = useState<any | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!uri) return;
+
+    setThumbnail(null);
+    generateVideoThumbnail(uri).then((thumb) => {
+      if (isMounted) {
+        setThumbnail(thumb);
+      }
+    });
+
+    return () => { isMounted = false; };
+  }, [uri]);
+
+  return (
+    <View style={{ position: 'relative', width: '100%', height: 200 }}>
+      {isPlaying && !toggle ? (
+        <ActiveVideoPlayer uri={uri} toggle={toggle} />
+      ) : (
+        <>
+          {thumbnail ? (
+            <Image source={thumbnail} contentFit="cover" style={{ width: '100%', height: '100%' }} />
+          ) : (
+            <View style={{ width: '100%', height: '100%', backgroundColor: '#222', justifyContent: 'center', alignItems: 'center' }}>
+              <Ionicons name="videocam-outline" size={48} color="#444" />
+            </View>
+          )}
+
+          {!toggle && (
+            <TouchableOpacity
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}
+              onPress={onPlay}
+            >
+              <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.7)" />
+            </TouchableOpacity>
+          )}
+        </>
+      )}
+
       {toggle && (
         <TouchableOpacity
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
           onPress={onPress}
           activeOpacity={0.7}
         />
-)}
+      )}
       {toggle && (
         <TouchableOpacity
           onPress={onPress}
@@ -75,13 +221,36 @@ export default function ProfileVideos() {
   const { profile } = useLocalSearchParams<{ profile: string }>();
   const [videos, setVideos] = useState<string[]>([]);
   const [toggle, setToggle] = useState(false);
+  const [playingVideo, setPlayingVideo] = useState<string | null>(null);
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
   const [sentVideos, setSentVideos] = useState<{ [fileName: string]: boolean }>({});
   const navigation = useNavigation();
+  const router = useRouter();
 
   // multi-select toggle in header
   useLayoutEffect(() => {
     navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity
+          onPress={() => router.navigate('/tabs/profiles')}
+          style={{
+            marginLeft: 12,
+            width: 56,
+            height: 56,
+            justifyContent: 'center',
+            alignItems: 'center',
+            display: 'flex',
+          }}
+        >
+          <Text style={{
+            color: '#8FD49D',
+            fontWeight: 'bold',
+            fontSize: 16,
+            textAlign: 'center',
+            transform: [{ translateX: -5 }, { translateY: -10 }],
+          }}>‹ Back</Text>
+        </TouchableOpacity>
+      ),
       headerRight: () => (
         <TouchableOpacity
           onPress={handleToggle}
@@ -106,7 +275,19 @@ export default function ProfileVideos() {
         </TouchableOpacity>
       ),
     });
-  }, [navigation, toggle]);
+  }, [navigation, toggle, router]);
+
+  // Reset selection when entering or leaving the screen
+  useFocusEffect(
+    useCallback(() => {
+      setSelectedVideos(new Set());
+      setToggle(false);
+      return () => {
+        setSelectedVideos(new Set());
+        setToggle(false);
+      };
+    }, [])
+  );
 
   // Load videos for the selected profile on mount and when profile changes
   useEffect(() => {
@@ -199,6 +380,7 @@ export default function ProfileVideos() {
   const handleToggle = () => {
     setToggle((prev) => !prev);
     setSelectedVideos(new Set());
+    setPlayingVideo(null); // Stop any playing video when toggling mode
   };
 
   /**
@@ -237,36 +419,26 @@ export default function ProfileVideos() {
    */
   const checkAgainstSentList = async () => {
     const sent = await getDesktopVideosSent();
-    const alreadySent = [];
-    const notSent = [];
-
-    // Build updated sent object incrementally
-    const updatedSent = { ...sent, [profile]: { ...sent[profile] } };
+    const alreadySent: string[] = [];
 
     for (const uri of selectedVideos) {
-        const fileName = uri.split('/').pop() || 'unknown';
-        if (sent[profile] && sent[profile][fileName]) {
-            alreadySent.push(fileName);
-            selectedVideos.delete(uri);
-        } else {
-            notSent.push(fileName);
-        }
+      const fileName = uri.split('/').pop() || 'unknown';
+      if (sent[profile] && sent[profile][fileName]) {
+        alreadySent.push(fileName);
+      }
     }
 
     if (alreadySent.length > 0) {
       Alert.alert(
-        'Upload Warning',
-        `The following videos have already been uploaded before:\n\n${alreadySent.join('\n')}\n\n`,
+        'Already Uploaded',
+        `The following videos were previously uploaded:\n\n${alreadySent.join('\n')}\n\nDo you still want to upload all selected videos?`,
         [
-          { text: 'Cancel', style: 'cancel' }
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Upload Anyway', onPress: () => performUpload() },
         ]
       );
-      performUpload(); // Proceed with uploading any new videos that weren't in the sent list
     } else {
-      const updated = await getDesktopVideosSent();
       performUpload();
-      console.log('All selected videos are new. Proceeding with upload.');
-      console.log(updated); // Debug log to verify sent list updates
     }
   };
 
@@ -433,55 +605,157 @@ export default function ProfileVideos() {
     Alert.alert('Sent Videos', JSON.stringify(sent, null, 2));
   }
 
+  const handleSelectAll = () => {
+    setSelectedVideos(new Set(videos));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedVideos(new Set());
+  };
+
+  const handleSelectNew = () => {
+    const newVideos = videos.filter(uri => {
+      const fileName = uri.split('/').pop() || '';
+      return !sentVideos[fileName];
+    });
+    setSelectedVideos(new Set(newVideos));
+  };
+
+  const handleRemoveWithConfirm = (uri: string) => {
+    const fileName = uri.split('/').pop() || 'this video';
+    Alert.alert(
+      'Remove Video',
+      `Are you sure you want to remove "${fileName}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => handleRemove(uri) },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }}>
 
-      <Text style={{ color: "#fff", fontSize: 24, textAlign: "center", margin: 10 }}>
-        {profile} Videos
+      {/* Back button */}
+      <TouchableOpacity
+        onPress={() => router.navigate('/tabs/profiles')}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 12, paddingTop: 8 }}
+      >
+        <Ionicons name="chevron-back" size={24} color="#8FD49D" />
+        <Text style={{ color: '#8FD49D', fontSize: 17 }}>Back</Text>
+      </TouchableOpacity>
+
+      {/* Centered title */}
+      <Text style={{ color: '#fff', fontSize: 24, fontWeight: '700', textAlign: 'center', paddingVertical: 10 }} numberOfLines={1}>
+        {profile}
       </Text>
-      <Button title="Print Sent Videos List" onPress={printSentVideos} />
-      <Button title="Add Video" onPress={pickVideo} />
 
-      {toggle && selectedVideos.size > 0 && (
-        <Button title="Upload Selected" onPress={handleUpload} />
-       )}
+      {/* Action buttons row - normal mode */}
+      {!toggle && (
+        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 12 }}>
+          <TouchableOpacity
+            onPress={handleToggle}
+            style={{ flex: 1, backgroundColor: '#2C2C2E', paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#444' }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>Select</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={pickVideo}
+            style={{ flex: 1, backgroundColor: '#8FD49D', paddingVertical: 12, borderRadius: 10, alignItems: 'center' }}
+          >
+            <Text style={{ color: '#000', fontWeight: '600', fontSize: 13 }}>Import From Gallery</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-      <Button title="Print Selected" onPress={() => console.log([...selectedVideos])} />
-
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-        {videos.length === 0 ? (
-
-          <Text style={{ color: "#fff", textAlign: "center" }}>No videos found.</Text>
-
-        ) : (
-
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-            {videos.map((uri) => {
-              const fileName = uri.split('/').pop() || '';
-              const isSent = sentVideos[fileName];
-              return (
-                <View
-                  key={uri}
-                  style={{
-                    width: '48%',
-                    marginBottom: 16,
-                    backgroundColor: '#111',
-                    borderRadius: 8,
-                    overflow: 'hidden',
-                    borderWidth: 3,
-                    borderColor: isSent ? '#ff855c' : '#444', // Green if sent, gray otherwise
-                  }}
-                >
-                  <VideoPlayer uri={uri} toggle={toggle} selected={selectedVideos.has(uri)} onPress={() => handleVideoSelection(uri)} />
-                  <TouchableOpacity onPress={() => handleRemove(uri)} style={{ marginTop: 8 }}>
-                    <Text style={{ color: '#ff4444', textAlign: 'center' }}>Remove</Text>
-                  </TouchableOpacity>
-                </View>
-              );
-            })}
+      {/* Action buttons row - select mode */}
+      {toggle && (
+        <View style={{ paddingHorizontal: 16, marginBottom: 8, gap: 8 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              onPress={handleToggle}
+              style={{ flex: 1, backgroundColor: '#3a3a3a', paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#555' }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleUpload}
+              disabled={selectedVideos.size === 0}
+              style={{ flex: 1, backgroundColor: selectedVideos.size > 0 ? '#4A90E2' : '#1a1a3a', paddingVertical: 12, borderRadius: 10, alignItems: 'center' }}
+            >
+              <Text style={{ color: selectedVideos.size > 0 ? '#fff' : '#555', fontWeight: '600', fontSize: 13 }}>
+                {selectedVideos.size > 0 ? `Upload (${selectedVideos.size})` : 'Upload'}
+              </Text>
+            </TouchableOpacity>
           </View>
-        )}
-      </ScrollView>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              onPress={handleSelectAll}
+              style={{ flex: 1, backgroundColor: '#2C2C2E', paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#444' }}
+            >
+              <Text style={{ color: '#8FD49D', fontWeight: '600', fontSize: 13 }}>Select All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleSelectNew}
+              style={{ flex: 1, backgroundColor: '#2C2C2E', paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#444' }}
+            >
+              <Text style={{ color: '#4A90E2', fontWeight: '600', fontSize: 13 }}>Select New</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleDeselectAll}
+              style={{ flex: 1, backgroundColor: '#2C2C2E', paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#444' }}
+            >
+              <Text style={{ color: '#aaa', fontWeight: '600', fontSize: 13 }}>Deselect All</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {videos.length === 0 ? (
+        <View style={{ padding: 20, alignItems: 'center' }}>
+          <Text style={{ color: "#fff", textAlign: "center" }}>No videos found.</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={videos}
+          keyExtractor={(item) => item}
+          numColumns={2}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
+          columnWrapperStyle={{ justifyContent: 'space-between' }}
+          renderItem={({ item: uri }) => {
+            const fileName = uri.split('/').pop() || '';
+            const isSent = sentVideos[fileName];
+            return (
+              <View
+                style={{
+                  width: '48%',
+                  marginBottom: 16,
+                  backgroundColor: '#111',
+                  borderRadius: 10,
+                  overflow: 'hidden',
+                  borderWidth: 2,
+                  borderColor: isSent ? '#ff855c' : selectedVideos.has(uri) ? '#4A90E2' : '#333',
+                }}
+              >
+                <VideoPlayer
+                  uri={uri}
+                  toggle={toggle}
+                  selected={selectedVideos.has(uri)}
+                  isPlaying={playingVideo === uri}
+                  onPlay={() => setPlayingVideo(uri)}
+                  onPress={() => handleVideoSelection(uri)}
+                />
+                <TouchableOpacity
+                  onPress={() => handleRemoveWithConfirm(uri)}
+                  style={{ marginVertical: 8, marginHorizontal: 10, paddingVertical: 8, borderRadius: 8, backgroundColor: '#3a0000', alignItems: 'center' }}
+                >
+                  <Text style={{ color: '#ff4444', fontWeight: '600', fontSize: 13 }}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          }}
+        />
+      )}
 
     </SafeAreaView>
   );

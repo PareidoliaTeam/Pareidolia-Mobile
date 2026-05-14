@@ -10,12 +10,12 @@
  * directory. The user can then view their recorded videos in the video library associated with that
  * dataset. The screen also displays the currently selected dataset profile and the server connection status.
  */
-import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useServer } from '@/contexts/ServerContext';
@@ -78,6 +78,7 @@ export default function CameraScreen() {
      * @deprecated
      */
     const takePhoto = async () => {
+        if (!profile) return; // Don't proceed if no profile selected
         const result = await ImagePicker.launchCameraAsync({
             mediaTypes: ['images'],
             allowsEditing: true,
@@ -100,6 +101,7 @@ export default function CameraScreen() {
      * @returns {Promise<void>}
      */
     const takeVideo = async () => {
+        if (!profile) return; // Don't proceed if no profile selected
         const result = await ImagePicker.launchCameraAsync({
             mediaTypes: ['videos'],
             allowsEditing: true,
@@ -121,17 +123,26 @@ export default function CameraScreen() {
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
             <View style={styles.container}>
 
-            <Text style={styles.title}> Selected Profile: {profile ?? 'None'} </Text>
-            
-            <Text style={styles.modelStatus}>Server IP: {serverIP ?? 'Not Connected'}</Text>
+            <View style={styles.headerCard}>
+                <View style={styles.infoRow}>
+                    <Ionicons name="images-outline" size={28} color="#8FD49D" />
+                    <Text style={styles.profileText} numberOfLines={1}>{profile ?? 'No Profile Selected'}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                    <Ionicons name="server-outline" size={20} color="#8FD49D" />
+                    <Text style={styles.infoText}>Server: {serverIP ?? 'Not Connected'}</Text>
+                </View>
+            </View>
 
             <View style={styles.buttonContainer}>
-                <TouchableOpacity style={styles.button} onPress={takePhoto}>
-                    <Text style={styles.buttonText}> Take Photo</Text>
-                </TouchableOpacity>
+                {/* <TouchableOpacity style={[styles.actionButton, !profile && styles.buttonDisabled]} onPress={takePhoto} disabled={!profile}>
+                    <Ionicons name="camera-outline" size={24} color="#fff" />
+                    <Text style={styles.buttonText}>Take Photo</Text>
+                </TouchableOpacity> */}
 
-                <TouchableOpacity style={styles.button} onPress={takeVideo}>
-                    <Text style={styles.buttonText}> Record Video</Text>
+                <TouchableOpacity style={[styles.actionButton, !profile && styles.buttonDisabled]} onPress={takeVideo} disabled={!profile}>
+                    <Ionicons name="videocam-outline" size={24} color="#fff" />
+                    <Text style={styles.buttonText}>Record Video</Text>
                 </TouchableOpacity>
             </View>
 
@@ -163,43 +174,62 @@ const styles = StyleSheet.create({
     },
     container: {
         flex: 1, 
-        justifyContent: 'center',  
         alignItems: 'center',
+        justifyContent: 'center',
         backgroundColor: '#000',
         padding: 20,
     },
-    title: {
-        fontSize: 28,
-        fontWeight: 'bold',
+    headerCard: {
+        backgroundColor: '#1C1C1E',
+        borderRadius: 16,
+        padding: 20,
+        width: '100%',
+        maxWidth: 340,
         marginBottom: 40,
-        color: '#fff',
+        borderWidth: 1,
+        borderColor: '#333',
     },
-    modelStatus: {
-        color: '#8FD49D',
-        fontSize: 14,
-        marginBottom: 20,
+    infoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 8,
+        gap: 12,
+    },
+    profileText: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: '#fff',
+        flexShrink: 1,
+    },
+    infoText: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#fff',
+        flexShrink: 1,
     },
     buttonContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
         gap: 16,
         width: '100%',
-        maxWidth: 300,
+        maxWidth: 340,
     },
-    button: {
+    actionButton: {
         backgroundColor: '#8FD49D',
-        paddingVertical: 16,
-        paddingHorizontal: 32,
-        borderRadius: 12,
+        flex: 1,
+        paddingVertical: 18,
+        borderRadius: 16,
         alignItems: 'center',
-        shadowColor: '#8FD49D',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.5,
-        shadowRadius: 8,
-        elevation: 4,
+        justifyContent: 'center',
+        gap: 8,
+    },
+    buttonDisabled: {
+        backgroundColor: '#3A3A3C',
     },
     buttonText: {
         color: '#fff',
-        fontSize: 18,
-        fontWeight: '600',
+        fontSize: 16,
+        fontWeight: '700',
     },
     previewContainer: {
         marginTop: 32,

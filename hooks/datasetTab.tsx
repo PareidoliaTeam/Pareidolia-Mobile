@@ -10,10 +10,10 @@
  * for setting the current dataset profile and the videos associated 
  * with each profile.
  */
-import { clearTmpFiles, logAllAppStorage, logStorageUsage, setSelectedDatasetProfile, clearTempDocuments } from '@/hooks/useVideoStorage';
+import { setSelectedDatasetProfile } from '@/hooks/useVideoStorage';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, Touchable, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import InputModal from './datasetCreationModal';
 
 type Props = {
@@ -29,7 +29,27 @@ function useDatasetTabContent({
   handleAddProfile,
   handleRemoveProfile
 }: Props) {
+  const [activeProfile, setActiveProfile] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+
+  const handleSetActive = async (profile: string) => {
+    await setSelectedDatasetProfile(profile);
+    setActiveProfile(profile);
+    console.log(`Selected dataset profile: ${profile}`);
+  };
+
+  const showAddPrompt = () => {
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        'Add Profile',
+        'Enter a profile name',
+        (name) => { if (name && name.trim()) handleAddProfile(name.trim()); },
+        'plain-text'
+      );
+    } else {
+      setModalVisible(true);
+    }
+  };
 
   return (
     <>
@@ -43,42 +63,30 @@ function useDatasetTabContent({
         }}
         onCancel={() => setModalVisible(false)}
       />
-   
-      <ScrollView style={styles.container} contentContainerStyle={{paddingBottom: 40, paddingHorizontal: 20}}>
-
-        <View style={styles.grid}>
-          {datasets.map(profile => (
-            <View key={profile} style={styles.cardContainer}>
-              <Text style={styles.smallButtonText}>{profile}</Text>
-              <TouchableOpacity
-                style={[styles.smallButton, { marginTop: 8, backgroundColor: '#4A90E2' }]}
-                onPress={async () => {
-                  await setSelectedDatasetProfile(profile);
-                  console.log(`Selected dataset profile: ${profile}`);
-                }}
-              >
-                <Text style={styles.smallButtonText}>Set Profile</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.smallButton, { marginTop: 6 }]} 
-                onPress={() => router.push({ pathname: '/profileVideos', params: { profile } })}
-              >
-                <Text style={styles.smallButtonText}>View Videos</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-          
-          <TouchableOpacity 
-            style={[styles.cardContainer, styles.addCard]}
-            onPress={() => {
-              setModalVisible(true)
-              
-            }}
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 16, paddingTop: 12 }}>
+        {datasets.map(profile => (
+          <TouchableOpacity
+            key={profile}
+            style={[styles.card, activeProfile === profile && styles.cardActive]}
+            onPress={() => handleSetActive(profile)}
+            activeOpacity={0.75}
           >
-            <Text style={styles.addIcon}>+</Text>
-            <Text style={styles.smallButtonText}>Add Profile</Text>
+            <View style={styles.cardLeft}>
+              <View style={[styles.activeDot, activeProfile === profile && styles.activeDotOn]} />
+              <Text style={styles.profileName} numberOfLines={2}>{profile}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.viewButton}
+              onPress={() => router.push({ pathname: '/tabs/profileVideos', params: { profile } })}
+            >
+              <Text style={styles.viewButtonText}>Videos</Text>
+            </TouchableOpacity>
           </TouchableOpacity>
-        </View>
+        ))}
+
+        <TouchableOpacity style={styles.addButton} onPress={showAddPrompt}>
+          <Text style={styles.addButtonText}>+ Add Profile</Text>
+        </TouchableOpacity>
       </ScrollView>
     </>
   );
@@ -91,60 +99,69 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  titleContainer: {
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    backgroundColor: '#000',  // Also change this back from #b62d2d
-    paddingTop: 10,
-  },
-  header: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 40,
-    textAlign: 'center',
-  },
-  smallButton: {
-    backgroundColor: '#8FD49D',
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignSelf: 'center',
-    minWidth: 90,
-  },
-  smallButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  grid: {
+  card: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  cardContainer: {
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#1C1C1E',
-    padding: 20,
     borderRadius: 12,
-    width: '48%',
-    height: 150,
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: '#ffffff',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#333',
   },
-  addCard: {
-    borderStyle: 'dashed',
-    borderWidth: 2,
+  cardActive: {
     borderColor: '#8FD49D',
-    backgroundColor: 'transparent',
+    backgroundColor: '#1a2b1e',
   },
-  addIcon: {
-    fontSize: 48,
+  cardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 10,
+  },
+  activeDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#444',
+  },
+  activeDotOn: {
+    backgroundColor: '#8FD49D',
+  },
+  profileName: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+  },
+  viewButton: {
+    backgroundColor: '#2C2C2E',
+    borderWidth: 1,
+    borderColor: '#444',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  viewButtonText: {
     color: '#8FD49D',
-    fontWeight: '300',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  addButton: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#8FD49D',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  addButtonText: {
+    color: '#8FD49D',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
+
