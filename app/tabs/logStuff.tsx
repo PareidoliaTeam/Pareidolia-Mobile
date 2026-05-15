@@ -312,6 +312,7 @@ export default function ReceiveScreen() {
         ) : (
           Object.entries(files).map(([modelName, fields]) => {
             const isDownloaded = downloadedModels.has(modelName);
+            const labelsText = Object.keys(fields.labels).join(', ');
             return (
             <ThemedView key={modelName} style={styles.fileItem}>
               <View style={styles.fileItemHeader}>
@@ -324,7 +325,13 @@ export default function ReceiveScreen() {
               </View>
               {/* <ThemedText style={styles.fileDetails}>{fields.path}</ThemedText> */}
               <View style={styles.fileItemFooter}>
-                <ThemedText style={styles.fileDetails}>Labels: {Object.keys(fields.labels).join(', ')}</ThemedText>
+                <ThemedText
+                  style={styles.fileDetails}
+                  numberOfLines={3}
+                  ellipsizeMode="tail"
+                >
+                  Labels: {labelsText}
+                </ThemedText>
                 <TouchableOpacity
                   style={[styles.downloadButton, downloading !== null && styles.buttonDisabled]}
                   onPress={() => fetchModel(modelName)}
@@ -373,8 +380,8 @@ const styles = StyleSheet.create({
   },
   fileItemFooter: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    gap: 12,
   },
   downloadButton: {
     backgroundColor: '#007AFF',
@@ -384,6 +391,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'flex-end',
+    flexShrink: 0,
   },
   buttonDisabled: {
     backgroundColor: '#ccc',
@@ -439,6 +447,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     opacity: 0.7,
     marginBottom: 3,
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   fileDate: {
     fontSize: 12,
