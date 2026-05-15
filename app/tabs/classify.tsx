@@ -34,6 +34,8 @@ export default function Index() {
   const [modelPath, setModelPath] = useState<string | null>(null);
   const [modelLabels, setModelLabels] = useState<string[]>([]);
   const [inputShape, setInputShape] = useState<number[] | null>(null);
+  const [inputDataType, setInputDataType] = useState<'uint8' | 'float32'>('uint8');
+  const [modelInputError, setModelInputError] = useState<string | null>(null);
   const [displayLabel, setDisplayLabel] = useState<string>(''); // State to hold the label to display on the screen
   const lastLabel = useSharedValue("");
   const isClassifying = useSharedValue(false);
@@ -148,11 +150,23 @@ export default function Index() {
   useFocusEffect(
     useCallback(() => {
       if (!model) return;
-      const inputShape = model.inputs[0].shape; // Assuming single input tensor
+      const inputTensor = model.inputs[0]; // Assuming single input tensor
+      const inputShape = inputTensor.shape;
       const outputShape = model.outputs[0].shape; // Assuming single output tensor
+      const dataType = inputTensor.dataType === 'float32' ? 'float32' : 'uint8';
       setInputShape(inputShape);
+      setInputDataType(dataType);
       console.log('Model input shape:', inputShape);
+      console.log('Model input type:', inputTensor.dataType);
       console.log('Model output shape:', outputShape);
+
+      if (inputShape[1] <= 1 || inputShape[2] <= 1) {
+        const message = 'This downloaded model has a 1x1 input. Retrain and download the model again.';
+        console.warn(message, inputShape);
+        setModelInputError(message);
+      } else {
+        setModelInputError(null);
+      }
       return () => {
 
       };
@@ -197,13 +211,18 @@ export default function Index() {
     'worklet';
     if (!isClassifying.value) return;
     if (!model) return;
+    if (!inputShape) return;
+    if (inputShape[1] <= 1 || inputShape[2] <= 1) return;
+
+    const modelHeight = inputShape[1];
+    const modelWidth = inputShape[2];
     const data = resize(frame, { // capture YUV frame
       scale: {                   // resize to desired size (can be changed dynamically later)
-        width: inputShape ? inputShape[1] : 224,   // default to 224 if input shape not available
-        height: inputShape ? inputShape[2] : 224,  // default to 224 if input shape not available
+        width: modelWidth,
+        height: modelHeight,
       },
       pixelFormat: 'rgb',        // convert YUV to RGB
-      dataType: 'uint8',         // use uint8 format for size overhead
+      dataType: inputDataType,
     });
     
     const output = model.runSync([data]); // run the inference to get the predictions; 2D list of size 1 x n where n is the number of classes
@@ -218,7 +237,7 @@ export default function Index() {
       updateDisplayLabel(predictedLabel);
     }
 
-  }, [model, inputShape, modelLabels, updateDisplayLabel, lastLabel, isClassifying]);
+  }, [model, inputShape, inputDataType, modelLabels, updateDisplayLabel, lastLabel, isClassifying]);
 
   /**
    * @description Handles opening the camera for live classification
@@ -238,6 +257,7 @@ export default function Index() {
   if (!modelPath) return <ThemedView style={styles.container}><ThemedText>No model loaded. Please download a model first.</ThemedText></ThemedView>
   if (loading) return <ThemedView style={styles.container}><ThemedText>Loading model...</ThemedText></ThemedView>
   if (error) return <ThemedView style={styles.container}><ThemedText>Error: {error.message}</ThemedText></ThemedView>
+  if (modelInputError) return <ThemedView style={styles.container}><ThemedText>{modelInputError}</ThemedText></ThemedView>
 
   return (
     <ThemedView style={styles.container}>
